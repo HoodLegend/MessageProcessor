@@ -44,3 +44,29 @@ Schedule::command('data:send-to-server')
     ->onFailure(function () {
         \Log::error('Data transmission failed');
     });
+
+    Schedule::command('receipts:process')
+             ->everyFiveMinutes()
+            ->withoutOverlapping() // Prevent multiple instances from running
+            ->runInBackground()
+            ->onSuccess(function () {
+                \Log::info('Receipt processing completed successfully');
+            })
+            ->onFailure(function () {
+                \Log::error('Receipt processing failed');
+            });
+
+
+ // Run download script every minute
+    // Schedule::command('bank:download-files')
+    //          ->everyMinute()
+    //          ->withoutOverlapping()
+    //          ->runInBackground()
+    //          ->appendOutputTo(storage_path('logs/downloaded_messages.log'));
+
+    // Decode messages every 2 minutes (offset to avoid conflicts)
+    // Schedule::command('bank:decode-messages')
+    //          ->everyTwoMinutes()
+    //          ->withoutOverlapping()
+    //          ->runInBackground()
+    //          ->appendOutputTo(storage_path('logs/decoded_messages.log'));

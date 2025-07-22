@@ -41,7 +41,7 @@ class SendDataToServerCommand extends Command
     public function __construct()
     {
         parent::__construct();
-        $this->logsPath = storage_path('logs/data_transmission_logs/data_transmission');
+        $this->logsPath = storage_path('logs/decoded_messages');
         $this->serverUrl = 'https://www.example.com/api/receive';
         $this->timeout = 30;
     }
