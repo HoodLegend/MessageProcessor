@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\MessageController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\ReceiptMessageController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -25,7 +26,7 @@ Route::middleware(['auth', 'device-access'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-    Route::get('/messages', [MessageController::class, 'getMessages'])->name('messages.index');
+    Route::get('/messages', [ReceiptMessageController::class, 'index'])->name('messages.index');
     Route::get('/upload-file', [MessageController::class, "uploadForm"])->name('messages.upload');
 });
 

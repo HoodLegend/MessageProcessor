@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\RedisMessageRetriever;
 use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class ReceiptMessageController extends Controller
 {
@@ -14,11 +15,11 @@ class ReceiptMessageController extends Controller
         $this->messageRetriever = $messageRetriever;
     }
 
-    public function index(): JsonResponse
+    public function index()
     {
         $messages = $this->messageRetriever->getAllMessages();
 
-        return response()->json([
+        return Inertia::render("Messages", [
             'success' => true,
             'data' => $messages,
             'total' => count($messages)
