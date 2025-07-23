@@ -11,466 +11,381 @@ use Inertia\Inertia;
 
 class MessageController extends Controller
 {
-    protected $messageParser;
+   private string $redisKey = "dat_transactions";
 
-    public function __construct(MessageProcessorService $messageParser)
+
+
+    /**
+     * Get all transactions
+     */
+    public function index(Request $request)
     {
-        $this->messageParser = $messageParser;
+        try {
+            $redisKey = $request->get('redis_key', $this->redisKey);
+            $data = Redis::get($redisKey);
+
+            if (!$data) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No transaction data found',
+                    'data' => []
+                ], 404);
+            }
+
+            $transactions = json_decode($data, true);
+
+            // Apply pagination if requested
+            $perPage = $request->get('per_page', null);
+            $page = $request->get('page', 1);
+
+            if ($perPage) {
+                $total = count($transactions);
+                $offset = ($page - 1) * $perPage;
+                $paginatedTransactions = array_slice($transactions, $offset, $perPage);
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $paginatedTransactions,
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $perPage,
+                        'total' => $total,
+                        'last_page' => ceil($total / $perPage)
+                    ]
+                ]);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data' => $transactions,
+                'total' => count($transactions)
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving transactions: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
-    public function index()
+    /**
+     * Get a specific transaction by transaction ID
+     */
+    public function show(Request $request, string $transactionId)
     {
-        return Inertia::render('MessageIndex');
+        try {
+            $redisKey = $request->get('redis_key', $this->redisKey);
+            $transactionKey = "{$redisKey}:transaction:{$transactionId}";
+            $data = Redis::get($transactionKey);
+
+            if (!$data) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Transaction not found',
+                    'transaction_id' => $transactionId
+                ], 404);
+            }
+
+            $transaction = json_decode($data, true);
+
+            return response()->json([
+                'success' => true,
+                'data' => $transaction
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving transaction: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
-    public function uploadForm(){
-        return Inertia::render('Upload');
-    }
-
-    public function upload(Request $request)
+     /**
+     * Search transactions by various criteria
+     */
+    public function search(Request $request)
     {
-        $request->validate([
-            'file' => 'required|file|mimes:txt,log|max:10240' // 10MB max
+        $validator = Validator::make($request->all(), [
+            'mobile_number' => 'nullable|string',
+            'date' => 'nullable|date_format:Y-m-d',
+            'date_from' => 'nullable|date_format:Y-m-d',
+            'date_to' => 'nullable|date_format:Y-m-d',
+            'amount' => 'nullable|numeric',
+            'amount_min' => 'nullable|numeric',
+            'amount_max' => 'nullable|numeric',
+            'file' => 'nullable|string',
+            'per_page' => 'nullable|integer|min:1|max:100',
+            'page' => 'nullable|integer|min:1',
+            'redis_key' => 'nullable|string'
         ]);
 
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $validator->errors()
+            ], 400);
+        }
+
         try {
-            $file = $request->file('file');
-            $fileName = 'uploads/' . uniqid() . '_' . $file->getClientOriginalName();
-            $path = $file->storeAs('', $fileName);
+            $redisKey = $request->get('redis_key', $this->redisKey);
+            $data = Redis::get($redisKey);
 
-            // Process the uploaded file
-            $result = $this->processTransactionFile($path);
+            if (!$data) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No transaction data found',
+                    'data' => []
+                ], 404);
+            }
 
-            // Clean up uploaded file
-            Storage::delete($path);
+            $transactions = json_decode($data, true);
+            $filtered = $this->filterTransactions($transactions, $request);
+
+            // Apply pagination if requested
+            $perPage = $request->get('per_page', null);
+            $page = $request->get('page', 1);
+
+            if ($perPage) {
+                $total = count($filtered);
+                $offset = ($page - 1) * $perPage;
+                $paginatedTransactions = array_slice($filtered, $offset, $perPage);
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $paginatedTransactions,
+                    'pagination' => [
+                        'current_page' => (int) $page,
+                        'per_page' => (int) $perPage,
+                        'total' => $total,
+                        'last_page' => ceil($total / $perPage)
+                    ]
+                ]);
+            }
 
             return response()->json([
                 'success' => true,
-                'message' => "File processed successfully",
-                'data' => [
-                    'summary' => [
-                        'total_lines' => $result['total_lines'],
-                        'parsed_records' => $result['parsed_records'],
-                        'failed_records' => $result['failed_records'],
-                        'processing_time' => $result['processing_time']
-                    ],
-                    'transactions' => $result['transactions']
-                ]
+                'data' => $filtered,
+                'total' => count($filtered)
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => 'Error processing file: ' . $e->getMessage()
+                'message' => 'Error searching transactions: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    public function getMessages(Request $request)
+        /**
+     * Get transactions by mobile number
+     */
+    public function getByMobile(Request $request, string $mobileNumber): JsonResponse
     {
-        $limit = $request->get('limit', 50);
-        $messageType = $request->get('message_type'); // Changed from service_type
-        $status = $request->get('status');
-        $dateFrom = $request->get('date_from');
-        $dateTo = $request->get('date_to');
-
         try {
-            $messages = $this->getTransactionsFromRedis($limit, $messageType, $status, $dateFrom, $dateTo);
+            $redisKey = $request->get('redis_key', $this->redisKey);
+            $data = Redis::get($redisKey);
 
-            return Inertia::render("Messages", [
+            if (!$data) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No transaction data found',
+                    'data' => []
+                ], 404);
+            }
+
+            $transactions = json_decode($data, true);
+            $filtered = array_filter($transactions, function($transaction) use ($mobileNumber) {
+                return $transaction['mobile_number'] === $mobileNumber;
+            });
+
+            return response()->json([
                 'success' => true,
-                'data' => $messages,
-                'count' => count($messages),
-                'filters_applied' => [
-                    'limit' => $limit,
-                    'message_type' => $messageType,
-                    'status' => $status,
-                    'date_range' => $dateFrom && $dateTo ? "{$dateFrom} to {$dateTo}" : null
-                ]
+                'data' => array_values($filtered),
+                'total' => count($filtered),
+                'mobile_number' => $mobileNumber
             ]);
+
         } catch (\Exception $e) {
-            return Inertia::render("Messages", [
+            return response()->json([
                 'success' => false,
-                'messages' => 'Error retrieving messages: ' . $e->getMessage()
+                'message' => 'Error retrieving transactions: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    public function getStats()
+    /**
+     * Get transactions by date
+     */
+    public function getByDate(Request $request, string $date): JsonResponse
+    {
+        $validator = Validator::make(['date' => $date], [
+            'date' => 'required|date_format:Y-m-d'
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Invalid date format. Use YYYY-MM-DD',
+                'errors' => $validator->errors()
+            ], 400);
+        }
+
+        try {
+            $redisKey = $request->get('redis_key', $this->redisKey);
+            $data = Redis::get($redisKey);
+
+            if (!$data) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No transaction data found',
+                    'data' => []
+                ], 404);
+            }
+
+            $transactions = json_decode($data, true);
+            $filtered = array_filter($transactions, function($transaction) use ($date) {
+                return $transaction['date'] === $date;
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => array_values($filtered),
+                'total' => count($filtered),
+                'date' => $date
+            ]);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Error retrieving transactions: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get transaction statistics
+     */
+    public function stats(Request $request): JsonResponse
     {
         try {
-            $stats = $this->calculateTransactionStats();
+            $redisKey = $request->get('redis_key', $this->redisKey);
 
-            return Inertia::render("TransactionStats", [
+            // Get metadata
+            $metadataKey = "{$redisKey}:metadata";
+            $metadataData = Redis::get($metadataKey);
+            $metadata = $metadataData ? json_decode($metadataData, true) : null;
+
+            // Get main data for additional calculations
+            $data = Redis::get($redisKey);
+
+            if (!$data) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'No transaction data found'
+                ], 404);
+            }
+
+            $transactions = json_decode($data, true);
+
+            // Calculate statistics
+            $amounts = array_column($transactions, 'amount');
+            $totalAmount = array_sum($amounts);
+            $averageAmount = count($amounts) > 0 ? $totalAmount / count($amounts) : 0;
+
+            $stats = [
+                'total_transactions' => count($transactions),
+                'total_amount' => round($totalAmount, 2),
+                'average_amount' => round($averageAmount, 2),
+                'min_amount' => count($amounts) > 0 ? min($amounts) : 0,
+                'max_amount' => count($amounts) > 0 ? max($amounts) : 0,
+                'unique_mobile_numbers' => count(array_unique(array_column($transactions, 'mobile_number'))),
+                'unique_dates' => count(array_unique(array_column($transactions, 'date'))),
+                'unique_files' => count(array_unique(array_column($transactions, 'file'))),
+                'date_range' => [
+                    'from' => min(array_column($transactions, 'date')),
+                    'to' => max(array_column($transactions, 'date'))
+                ]
+            ];
+
+            // Add metadata if available
+            if ($metadata) {
+                $stats['processed_at'] = $metadata['processed_at'];
+                $stats['files_processed'] = $metadata['files_processed'];
+            }
+
+            // Add Redis info
+            $ttl = Redis::ttl($redisKey);
+            $stats['redis_info'] = [
+                'key' => $redisKey,
+                'ttl' => $ttl > 0 ? $ttl : 'No expiration',
+                'memory_usage' => strlen($data) . ' bytes'
+            ];
+
+            return response()->json([
                 'success' => true,
                 'data' => $stats
             ]);
+
         } catch (\Exception $e) {
-            return Inertia::render("TransactionStats", [
+            return response()->json([
                 'success' => false,
-                'message' => 'Error retrieving stats: ' . $e->getMessage()
+                'message' => 'Error retrieving statistics: ' . $e->getMessage()
             ], 500);
         }
     }
 
-    // public function processFromPath(Request $request)
-    // {
-    //     $request->validate([
-    //         'file_path' => 'required|string'
-    //     ]);
-
-    //     try {
-    //         // Check if file exists
-    //         if (!Storage::exists($request->file_path) && !file_exists($request->file_path)) {
-    //             throw new \Exception("File not found: {$request->file_path}");
-    //         }
-
-    //         $result = $this->processTransactionFile($request->file_path);
-
-    //         return response()->json([
-    //             'success' => true,
-    //             'message' => "File processed successfully from path",
-    //             'data' => [
-    //                 'file_path' => $request->file_path,
-    //                 'summary' => [
-    //                     'total_lines' => $result['total_lines'],
-    //                     'parsed_records' => $result['parsed_records'],
-    //                     'failed_records' => $result['failed_records'],
-    //                     'processing_time' => $result['processing_time']
-    //                 ]
-    //             ]
-    //         ]);
-    //     } catch (\Exception $e) {
-    //         return response()->json([
-    //             'success' => false,
-    //             'messages' => 'Error processing file: ' . $e->getMessage()
-    //         ], 500);
-    //     }
-    // }
-
-    public function processFromPath(Request $request)
-{
-    $request->validate([
-        'file' => 'required|file|mimes:txt,log,dat|max:10240', // 10MB limit
-    ]);
-
-    try {
-    $storedPath = $request->file('file')->store('uploads/messages');
-    $fullPath = storage_path("app/private/{$storedPath}"); // Correct and dynamic
-
-        \Log::info("Stored relative path: {$storedPath}");
-        \Log::info("Full storage path: {$fullPath}");
-        \Log::info("File exists? " . (file_exists($fullPath) ? 'YES' : 'NO'));
-
-
-        if (!file_exists($fullPath)) {
-    throw new \Exception("File not found immediately after storing: {$fullPath}");
-}
-
-        // Process the file
-        $result = $this->processTransactionFile($fullPath);
-
-        return response()->json([
-            'success' => true,
-            'message' => "File uploaded and processed successfully",
-            'data' => [
-                'file_path' => $storedPath,
-                'summary' => [
-                    'total_lines' => $result['total_lines'],
-                    'parsed_records' => $result['parsed_records'],
-                    'failed_records' => $result['failed_records'],
-                    'processing_time' => $result['processing_time']
-                ]
-            ]
-        ]);
-    } catch (\Exception $e) {
-        return response()->json([
-            'success' => false,
-            'message' => 'Error processing uploaded file: ' . $e->getMessage()
-        ], 500);
-    }
-}
-
-
-    public function cleanup()
+    /**
+     * Clear all transaction data
+     */
+    public function clear(Request $request): JsonResponse
     {
         try {
-            $result = $this->cleanupExpiredData();
+            $redisKey = $request->get('redis_key', $this->redisKey);
+
+            // Get all keys related to this data
+            $keys = Redis::keys("{$redisKey}*");
+
+            if (empty($keys)) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'No data found to clear'
+                ]);
+            }
+
+            $deletedCount = Redis::del($keys);
 
             return response()->json([
                 'success' => true,
-                'message' => "Cleanup completed successfully",
-                'data' => $result
+                'message' => 'All transaction data cleared successfully',
+                'deleted_keys' => $deletedCount
             ]);
+
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'messages' => 'Error during cleanup: ' . $e->getMessage()
+                'message' => 'Error clearing data: ' . $e->getMessage()
             ], 500);
         }
     }
 
-       public function show($id)
-    {
-        $message = Redis::hgetall("message:{$id}");
 
-        if (empty($message)) {
-            abort(404, 'Message not found');
-        }
 
-        return Inertia::render('MessageDetails', [
-            'message' => $message
-        ]);
-    }
-
-    /**
-     * Process transaction file and store in Redis
+      /**
+     * Remove transaction from main data array
      */
-    private function processTransactionFile($filePath)
+    private function removeFromMainData(string $redisKey, string $transactionId): void
     {
-        $startTime = microtime(true);
-
-        // Read file content
-        if (Storage::exists($filePath)) {
-            $fileData = Storage::get($filePath);
-        } else {
-            $fileData = file_get_contents($filePath);
-        }
-
-        if ($fileData === false) {
-            throw new \Exception("Failed to read file: {$filePath}");
-        }
-
-        // Parse transaction records
-        $lines = explode("\n", trim($fileData));
-        $transactions = [];
-        $failedCount = 0;
-
-        foreach ($lines as $lineNumber => $line) {
-            $line = trim($line);
-            if (empty($line)) {
-                continue;
-            }
-
-            try {
-                $parsedRecord = $this->parseTransactionRecord($line);
-                if ($parsedRecord) {
-                    $parsedRecord['line_number'] = $lineNumber + 1;
-                    $parsedRecord['raw_data'] = $line;
-                    $transactions[] = $parsedRecord;
-                }
-            } catch (\Exception $e) {
-                $failedCount++;
-                $transactions[] = [
-                    'line_number' => $lineNumber + 1,
-                    'raw_data' => $line,
-                    'parse_error' => $e->getMessage(),
-                    'parsed' => false
-                ];
-            }
-        }
-
-        $processedData = [
-            'type' => 'transaction_records',
-            'processed_at' => Carbon::now()->toISOString(),
-            'total_lines' => count($lines),
-            'parsed_records' => count($transactions) - $failedCount,
-            'failed_records' => $failedCount,
-            'processing_time' => round(microtime(true) - $startTime, 3),
-            'transactions' => $transactions
-        ];
-
-        // Store in Redis
-        $redis = Redis::connection();
-        $redis->setex('transaction-records', 3600, json_encode($processedData)); // 1 hour TTL
-
-        return $processedData;
-    }
-
-    /**
-     * Parse a single transaction record
-     */
-    private function parseTransactionRecord($line)
-    {
-        if (strlen($line) < 50) {
-            throw new \Exception("Line too short to be a valid transaction record");
-        }
-
-        $record = [
-            'message_id' => trim(substr($line, 0, 20)),
-            'account_number' => trim(substr($line, 20, 20)),
-            'message_type' => trim(substr($line, 40, 10)),
-            'description' => trim(substr($line, 50, 30)),
-            'transaction_type' => trim(substr($line, 80, 10)),
-            'receipt_type' => trim(substr($line, 90, 30)),
-            'status' => trim(substr($line, 120, 20)),
-            'parsed' => true
-        ];
-
-        // Extract additional fields for longer records
-        if (strlen($line) > 200) {
-            $record['date'] = trim(substr($line, 160, 8));
-            $record['amount'] = trim(substr($line, 180, 15));
-            $record['reference'] = trim(substr($line, 195, 20));
-            $record['time'] = trim(substr($line, 215, 6));
-            $record['channel'] = trim(substr($line, 230, 20));
-            $record['terminal'] = trim(substr($line, 250, 10));
-        }
-
-        // Clean up empty fields
-        $record = array_filter($record, function($value) {
-            return $value !== '' && $value !== null;
-        });
-
-        return $record;
-    }
-
-    /**
-     * Get transactions from Redis with filtering
-     */
-    private function getTransactionsFromRedis($limit = 50, $messageType = null, $status = null, $dateFrom = null, $dateTo = null)
-    {
-        // $redis = Redis::connection();
-        $data = Redis::get('local-file-data');
-
-        if (!$data) {
-            return [];
-        }
-
-        $decodedData = json_decode($data, true);
-        if (!isset($decodedData['transactions'])) {
-            return [];
-        }
-
-        $transactions = $decodedData['transactions'];
-
-        // Apply filters
-        if ($messageType) {
-            $transactions = array_filter($transactions, function($transaction) use ($messageType) {
-                return isset($transaction['message_type']) &&
-                       stripos($transaction['message_type'], $messageType) !== false;
+        $data = Redis::get($redisKey);
+        if ($data) {
+            $transactions = json_decode($data, true);
+            $filtered = array_filter($transactions, function($transaction) use ($transactionId) {
+                return $transaction['transaction_id'] !== $transactionId;
             });
-        }
 
-        if ($status) {
-            $transactions = array_filter($transactions, function($transaction) use ($status) {
-                return isset($transaction['status']) &&
-                       stripos($transaction['status'], $status) !== false;
-            });
+            Redis::set($redisKey, json_encode(array_values($filtered)));
         }
-
-        if ($dateFrom && $dateTo) {
-            $transactions = array_filter($transactions, function($transaction) use ($dateFrom, $dateTo) {
-                if (!isset($transaction['date'])) return true;
-                $transactionDate = $transaction['date'];
-                return $transactionDate >= $dateFrom && $transactionDate <= $dateTo;
-            });
-        }
-
-        // Apply limit
-        return array_slice(array_values($transactions), 0, $limit);
     }
-
-    /**
-     * Calculate transaction statistics
-     */
-    private function calculateTransactionStats()
-    {
-        // $redis = Redis::connection();
-        $data = Redis::get('local-file-data');
-
-        if (!$data) {
-            return [
-                'total_records' => 0,
-                'parsed_records' => 0,
-                'failed_records' => 0,
-                'last_processed' => null
-            ];
-        }
-
-        $decodedData = json_decode($data, true);
-        $transactions = $decodedData['transactions'] ?? [];
-
-        // Calculate stats
-        $totalRecords = count($transactions);
-        $parsedRecords = count(array_filter($transactions, function($t) {
-            return isset($t['parsed']) && $t['parsed'] === true;
-        }));
-        $failedRecords = $totalRecords - $parsedRecords;
-
-        // Group by message type
-        $messageTypes = [];
-        $statuses = [];
-
-        foreach ($transactions as $transaction) {
-            if (isset($transaction['message_type'])) {
-                $type = $transaction['message_type'];
-                $messageTypes[$type] = ($messageTypes[$type] ?? 0) + 1;
-            }
-
-            if (isset($transaction['status'])) {
-                $status = $transaction['status'];
-                $statuses[$status] = ($statuses[$status] ?? 0) + 1;
-            }
-        }
-
-        return [
-            'total_records' => $totalRecords,
-            'parsed_records' => $parsedRecords,
-            'failed_records' => $failedRecords,
-            'last_processed' => $decodedData['processed_at'] ?? null,
-            'processing_time' => $decodedData['processing_time'] ?? null,
-            'message_types' => $messageTypes,
-            'statuses' => $statuses
-        ];
-    }
-
-    /**
-     * Cleanup expired data and logs
-     */
-    private function cleanupExpiredData()
-    {
-        // $redis = Redis::connection();
-        $cleanedKeys = 0;
-
-        // Clean up old Redis keys (if you have multiple keys with timestamps)
-        $keys = Redis::keys('local-file-data-*');
-        $cutoffTime = Carbon::now()->subHours(24)->timestamp;
-
-        foreach ($keys as $key) {
-            // Extract timestamp from key if it follows a pattern
-            if (preg_match('/transaction-records-(\d+)/', $key, $matches)) {
-                $keyTimestamp = $matches[1];
-                if ($keyTimestamp < $cutoffTime) {
-                    Redis::del($key);
-                    $cleanedKeys++;
-                }
-            }
-        }
-
-        // Clean up old log files
-        $logsPath = storage_path('logs/file_processing');
-        $cleanedLogs = 0;
-
-        if (is_dir($logsPath)) {
-            $files = glob($logsPath . '/file_processing_*.log');
-            $cutoffDate = Carbon::now()->subWeek();
-
-            foreach ($files as $file) {
-                $fileDate = Carbon::createFromTimestamp(filemtime($file));
-                if ($fileDate->lt($cutoffDate)) {
-                    if (unlink($file)) {
-                        $cleanedLogs++;
-                    }
-                }
-            }
-        }
-
-        return [
-            'cleaned_redis_keys' => $cleanedKeys,
-            'cleaned_log_files' => $cleanedLogs,
-            'cleanup_time' => Carbon::now()->toISOString()
-        ];
-    }
-
-
 }

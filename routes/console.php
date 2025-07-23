@@ -16,8 +16,30 @@ Schedule::command('messages:cleanup')->weekly()
         \Log::error('Message cleanup failed');
     });
 
-Schedule::command('file:process-local', ['app/private/uploads/messages/2lOJrnCTdEBlMg1Iv85ANmCV9S5I3uPZcmmx4k0U.txt'])
-    ->everyFiveMinutes()
+Schedule::command('files:move-dat')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->onSuccess(function () {
+        \Log::info('Scheduled message processing completed successfully');
+    })
+    ->onFailure(function () {
+        \Log::error('Scheduled message processing failed');
+    });
+
+    Schedule::command('files:parse-dat')
+    ->everyMinute()
+    ->withoutOverlapping()
+    ->runInBackground()
+    ->onSuccess(function () {
+        \Log::info('Scheduled message processing completed successfully');
+    })
+    ->onFailure(function () {
+        \Log::error('Scheduled message processing failed');
+    });
+
+        Schedule::command('redis:dat-manager get')
+    ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
     ->onSuccess(function () {
@@ -45,16 +67,7 @@ Schedule::command('data:send-to-server')
         \Log::error('Data transmission failed');
     });
 
-    Schedule::command('receipts:process')
-             ->everyFiveMinutes()
-            ->withoutOverlapping() // Prevent multiple instances from running
-            ->runInBackground()
-            ->onSuccess(function () {
-                \Log::info('Receipt processing completed successfully');
-            })
-            ->onFailure(function () {
-                \Log::error('Receipt processing failed');
-            });
+
 
 
  // Run download script every minute
