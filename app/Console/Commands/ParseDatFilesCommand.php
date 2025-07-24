@@ -28,7 +28,7 @@ class ParseDatFilesCommand extends Command
      */
     public function handle()
     {
-                $datFilesPath = 'dat_files';
+        $datFilesPath = 'dat_files';
         $outputFormat = $this->option('output');
         $saveResults = $this->option('save');
 
@@ -41,7 +41,7 @@ class ParseDatFilesCommand extends Command
 
         // Get all .DAT files
         $datFiles = Storage::files($datFilesPath);
-        $datFiles = array_filter($datFiles, function($file) {
+        $datFiles = array_filter($datFiles, function ($file) {
             return pathinfo($file, PATHINFO_EXTENSION) === 'DAT';
         });
 
@@ -110,36 +110,61 @@ class ParseDatFilesCommand extends Command
 
             // Look for the pattern: YYYYMMDD followed by amount and mobile number
             // Pattern: 20250710 00000000000000008800 812345678
-            if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
-                $dateStr = $matches[1];
-                $amountStr = $matches[2];
-                $mobileStr = $matches[3];
+            //  if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
+            //     $dateStr = $matches[1];
+            //     $amountStr = $matches[2];
+            //     $mobileStr = $matches[3];
 
-                // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
-                $transactionId = '';
-                if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
-                    $transactionId = trim($transMatches[1]);
+            //     // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
+            //     $transactionId = '';
+            //     if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
+            //         $transactionId = trim($transMatches[1]);
+            //     }
+
+            //     // Parse date (YYYYMMDD to YYYY-MM-DD)
+            //     $date = $this->parseDate($dateStr);
+
+            //     // Parse amount (remove leading zeros and format as decimal)
+            //     $amount = $this->parseAmount($amountStr);
+
+            //     // Clean mobile number (remove leading zeros if any)
+            //     $mobileNumber = ltrim($mobileStr, '0');
+
+            //     $results->push([
+            //         'file' => $fileName,
+            //         'line' => $lineNumber + 1,
+            //         'date' => $date,
+            //         'amount' => $amount,
+            //         'mobile_number' => $mobileNumber,
+            //         'transaction_id' => $transactionId,
+            //         'raw_line' => $line
+            //     ]);
+            // }
+            if (preg_match_all('/(\d{8})(\d{20})(\d{10})/', $line, $matchesList, PREG_SET_ORDER)) {
+                foreach ($matchesList as $matches) {
+                    $dateStr = $matches[0];
+                    $amountStr = $matches[1];
+                    $mobileStr = $matches[2];
+
+                    $transactionId = '';
+                    if (preg_match('/\d{8}[A-Z0-9]{10,}/', $line, $transMatches)) {
+                        $transactionId = $transMatches[0];
+                    }
+
+                    $results->push([
+                        'file' => $fileName,
+                        'line' => $lineNumber + 1,
+                        'date' => $this->parseDate($matches[1]),
+                        'amount' => $this->parseAmount($matches[2]),
+                        'mobile_number' => ltrim($matches[3], '0'),
+                        'transaction_id' => $transactionId,
+                        'raw_line' => $line
+                    ]);
                 }
-
-                // Parse date (YYYYMMDD to YYYY-MM-DD)
-                $date = $this->parseDate($dateStr);
-
-                // Parse amount (remove leading zeros and format as decimal)
-                $amount = $this->parseAmount($amountStr);
-
-                // Clean mobile number (remove leading zeros if any)
-                $mobileNumber = ltrim($mobileStr, '0');
-
-                $results->push([
-                    'file' => $fileName,
-                    'line' => $lineNumber + 1,
-                    'date' => $date,
-                    'amount' => $amount,
-                    'mobile_number' => $mobileNumber,
-                    'transaction_id' => $transactionId,
-                    'raw_line' => $line
-                ]);
+            } else {
+                $this->warn("No match in line {$lineNumber}: {$line}");
             }
+
         }
 
         return $results;
@@ -168,7 +193,7 @@ class ParseDatFilesCommand extends Command
         }
 
         // Convert to decimal (assuming last 2 digits are cents)
-        $amountValue = (int)$amount;
+        $amountValue = (int) $amount;
         return number_format($amountValue / 100, 2, '.', '');
     }
 
@@ -199,7 +224,7 @@ class ParseDatFilesCommand extends Command
 
             default: // table
                 $headers = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
-                $rows = $results->map(function($record) {
+                $rows = $results->map(function ($record) {
                     return [
                         $record['file'],
                         $record['line'],
@@ -282,7 +307,7 @@ class ParseDatFilesCommand extends Command
         }
     }
 
-        /**
+    /**
      * Display Redis usage examples
      */
     private function displayRedisUsage(string $redisKey): void
