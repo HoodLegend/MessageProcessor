@@ -20,14 +20,14 @@ class DownloadDatFiles extends Command
      *
      * @var string
      */
-    protected $description = 'Move .DAT files from /var/www/fnb/nam/ReceitptItClient/download/ to Laravel storage';
+    protected $description = 'Move .DAT files from /var/www/fnb/nam/ReceiptItClient/download/ to Laravel storage';
 
     /**
      * Execute the console command.
      */
     public function handle()
     {
-        $sourcePath = '/var/www/fnb/nam/ReceitptItClient/download/';
+        $sourcePath = '/var/www/fnb/nam/ReceiptItClient/download/';
         $copyMode = $this->option('copy');
 
         // Check if source directory exists

@@ -16,6 +16,10 @@ Schedule::command('messages:cleanup')->weekly()
         \Log::error('Message cleanup failed');
     });
 
+Schedule::command('device:whitelist {ip}')
+    ->everyMinute()
+    ->withoutOverlapping();
+
 Schedule::command('files:move-dat')
     ->everyMinute()
     ->withoutOverlapping()
@@ -27,7 +31,7 @@ Schedule::command('files:move-dat')
         \Log::error('Scheduled message processing failed');
     });
 
-    Schedule::command('files:parse-dat')
+Schedule::command('files:parse-dat')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
@@ -38,7 +42,7 @@ Schedule::command('files:move-dat')
         \Log::error('Scheduled message processing failed');
     });
 
-        Schedule::command('redis:dat-manager get')
+Schedule::command('redis:dat-manager get')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
@@ -70,16 +74,16 @@ Schedule::command('data:send-to-server')
 
 
 
- // Run download script every minute
-    // Schedule::command('bank:download-files')
-    //          ->everyMinute()
-    //          ->withoutOverlapping()
-    //          ->runInBackground()
-    //          ->appendOutputTo(storage_path('logs/downloaded_messages.log'));
+// Run download script every minute
+// Schedule::command('bank:download-files')
+//          ->everyMinute()
+//          ->withoutOverlapping()
+//          ->runInBackground()
+//          ->appendOutputTo(storage_path('logs/downloaded_messages.log'));
 
-    // Decode messages every 2 minutes (offset to avoid conflicts)
-    // Schedule::command('bank:decode-messages')
-    //          ->everyTwoMinutes()
-    //          ->withoutOverlapping()
-    //          ->runInBackground()
-    //          ->appendOutputTo(storage_path('logs/decoded_messages.log'));
+// Decode messages every 2 minutes (offset to avoid conflicts)
+// Schedule::command('bank:decode-messages')
+//          ->everyTwoMinutes()
+//          ->withoutOverlapping()
+//          ->runInBackground()
+//          ->appendOutputTo(storage_path('logs/decoded_messages.log'));

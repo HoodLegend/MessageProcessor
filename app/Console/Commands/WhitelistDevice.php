@@ -27,7 +27,7 @@ class WhitelistDevice extends Command
     public function handle()
     {
                 $ip = $this->argument('ip');
-        $configPath = storage_path('app/access-control.conf');
+        $configPath = resource_path('config/access-control.conf');
 
         // Append IP if not already in file
         if (!str_contains(file_get_contents($configPath), $ip)) {
