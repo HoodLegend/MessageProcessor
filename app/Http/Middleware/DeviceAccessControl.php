@@ -75,8 +75,8 @@ class DeviceAccessControl
     {
 
         try {
-            $jarPath = storage_path('app/public/DeviceAccessControl.jar');
-            $configPath = storage_path('app/public/access-control.conf');
+            $jarPath = resource_path('jars/DeviceAccessControl.jar');
+            $configPath = resource_path('config/access-control.conf');
 
             if (!file_exists($jarPath)) {
                 Log::error("JAR file not found: $jarPath");
