@@ -130,6 +130,7 @@ class ParseDatFilesCommand extends Command
                 $this->warn("No match in line {$lineNumber}: {$line}");
             }
         }
+        return $results;
     }
 
     /**
