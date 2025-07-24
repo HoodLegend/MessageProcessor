@@ -14,15 +14,15 @@ Route::get('/', function () {
         'laravelVersion' => Application::VERSION,
         'phpVersion' => PHP_VERSION,
     ]);
-})->middleware('device-access');
+});
 
 
 
 Route::get('/dashboard', function () {
     return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified', 'device-access'])->name('dashboard');
+})->middleware(['auth', 'verified'])->name('dashboard');
 
-Route::middleware(['auth', 'device-access'])->group(function () {
+Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
@@ -39,6 +39,6 @@ Route::group( [], function () {
     Route::get('/stats', [MessageController::class, 'getStats'])->name("transaction.status");
     Route::get('/messages/{id}', [MessageController::class, 'show'])->name('messages.show');
     Route::post('/cleanup', [MessageController::class, 'cleanup']);
-})->middleware('device-access');
+});
 
 require __DIR__.'/auth.php';
