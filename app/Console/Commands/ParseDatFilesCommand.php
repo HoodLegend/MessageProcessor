@@ -103,71 +103,33 @@ class ParseDatFilesCommand extends Command
         foreach ($lines as $lineNumber => $line) {
             $line = trim($line);
 
-            // Skip empty lines
-            if (empty($line)) {
-                continue;
-            }
+            if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
+                $dateStr = $matches[1];                          // e.g., 20250508
+                $amountRaw = $matches[2];                        // e.g., 0000000000000000039000
+                $amountDigits = substr($amountRaw, -4);          // e.g., 3900
+                $amount = number_format(((int) $amountDigits) / 100, 2, '.', '');
 
-            // Look for the pattern: YYYYMMDD followed by amount and mobile number
-            // Pattern: 20250710 00000000000000008800 812345678
-            //  if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
-            //     $dateStr = $matches[1];
-            //     $amountStr = $matches[2];
-            //     $mobileStr = $matches[3];
+                $mobileNumber = ltrim($matches[3], '0');         // remove leading zero if needed
 
-            //     // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
-            //     $transactionId = '';
-            //     if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
-            //         $transactionId = trim($transMatches[1]);
-            //     }
-
-            //     // Parse date (YYYYMMDD to YYYY-MM-DD)
-            //     $date = $this->parseDate($dateStr);
-
-            //     // Parse amount (remove leading zeros and format as decimal)
-            //     $amount = $this->parseAmount($amountStr);
-
-            //     // Clean mobile number (remove leading zeros if any)
-            //     $mobileNumber = ltrim($mobileStr, '0');
-
-            //     $results->push([
-            //         'file' => $fileName,
-            //         'line' => $lineNumber + 1,
-            //         'date' => $date,
-            //         'amount' => $amount,
-            //         'mobile_number' => $mobileNumber,
-            //         'transaction_id' => $transactionId,
-            //         'raw_line' => $line
-            //     ]);
-            // }
-            if (preg_match_all('/(\d{8})(\d{20})(\d{10})/', $line, $matchesList, PREG_SET_ORDER)) {
-                foreach ($matchesList as $matches) {
-                    $dateStr = $matches[0];
-                    $amountStr = $matches[1];
-                    $mobileStr = $matches[2];
-
-                    $transactionId = '';
-                    if (preg_match('/\d{8}[A-Z0-9]{10,}/', $line, $transMatches)) {
-                        $transactionId = $transMatches[0];
-                    }
-
-                    $results->push([
-                        'file' => $fileName,
-                        'line' => $lineNumber + 1,
-                        'date' => $this->parseDate($matches[1]),
-                        'amount' => $this->parseAmount($matches[2]),
-                        'mobile_number' => ltrim($matches[3], '0'),
-                        'transaction_id' => $transactionId,
-                        'raw_line' => $line
-                    ]);
+                // Extract transaction/reference ID (12 characters after date)
+                $transactionId = '';
+                if (preg_match('/\d{8}([A-Z0-9]{12})/', $line, $transMatch)) {
+                    $transactionId = $transMatch[1];             // e.g., NAM03DWWAAAA
                 }
+
+                $results->push([
+                    'file' => $fileName,
+                    'line' => $lineNumber + 1,
+                    'date' => $this->parseDate($dateStr),
+                    'amount' => $amount,
+                    'mobile_number' => $mobileNumber,
+                    'transaction_id' => $transactionId,
+                    'raw_line' => $line
+                ]);
             } else {
                 $this->warn("No match in line {$lineNumber}: {$line}");
             }
-
         }
-
-        return $results;
     }
 
     /**
@@ -229,7 +191,7 @@ class ParseDatFilesCommand extends Command
                         $record['file'],
                         $record['line'],
                         $record['date'],
-                        '$' . $record['amount'],
+                        'N$' . $record['amount'],
                         $record['mobile_number'],
                         $record['transaction_id']
                     ];
