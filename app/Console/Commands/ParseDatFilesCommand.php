@@ -28,7 +28,7 @@ class ParseDatFilesCommand extends Command
      */
     public function handle()
     {
-                $datFilesPath = 'dat_files';
+        $datFilesPath = 'dat_files';
         $outputFormat = $this->option('output');
         $saveResults = $this->option('save');
 
@@ -41,7 +41,7 @@ class ParseDatFilesCommand extends Command
 
         // Get all .DAT files
         $datFiles = Storage::files($datFilesPath);
-        $datFiles = array_filter($datFiles, function($file) {
+        $datFiles = array_filter($datFiles, function ($file) {
             return pathinfo($file, PATHINFO_EXTENSION) === 'DAT';
         });
 
@@ -86,6 +86,14 @@ class ParseDatFilesCommand extends Command
         }
 
         $this->info("\nSummary: Extracted {$totalRecords} transaction records from " . count($datFiles) . " file(s)");
+
+        if ($allResults->isNotEmpty()) {
+            $redisKey = 'dat:transactions'; // Or allow this as an --option if you prefer
+            $ttl = 60; // 1 hour (you can change or make it configurable)
+
+            $this->storeInRedis($allResults, $redisKey, $ttl);
+            $this->displayRedisUsage($redisKey);
+        }
 
         return Command::SUCCESS;
     }
@@ -167,7 +175,7 @@ class ParseDatFilesCommand extends Command
             } else {
                 $this->warn("No match in line {$lineNumber}: {$line}");
             }
-}
+        }
 
 
         return $results;
@@ -196,7 +204,7 @@ class ParseDatFilesCommand extends Command
         }
 
         // Convert to decimal (assuming last 2 digits are cents)
-        $amountValue = (int)$amount;
+        $amountValue = (int) $amount;
         return number_format($amountValue / 100, 2, '.', '');
     }
 
@@ -227,7 +235,7 @@ class ParseDatFilesCommand extends Command
 
             default: // table
                 $headers = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
-                $rows = $results->map(function($record) {
+                $rows = $results->map(function ($record) {
                     return [
                         $record['file'],
                         $record['line'],
@@ -310,7 +318,7 @@ class ParseDatFilesCommand extends Command
         }
     }
 
-        /**
+    /**
      * Display Redis usage examples
      */
     private function displayRedisUsage(string $redisKey): void
