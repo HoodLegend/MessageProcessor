@@ -258,15 +258,15 @@ class ParseDatFilesCommand extends Command
     {
         try {
             $this->info("Storing results in Redis...");
-
+            $redis = Redis::connection();
             // Store as JSON string
             $jsonData = $results->toJson();
 
             if ($ttl > 0) {
-                Redis::setex($redisKey, $ttl, $jsonData);
+                $redis->setex($redisKey, $ttl, $jsonData);
                 $this->info("✓ Stored {$results->count()} records in Redis key '{$redisKey}' with TTL of {$ttl} seconds");
             } else {
-                Redis::set($redisKey, $jsonData);
+                $redis->set($redisKey, $jsonData);
                 $this->info("✓ Stored {$results->count()} records in Redis key '{$redisKey}' (no expiration)");
             }
 
@@ -278,9 +278,9 @@ class ParseDatFilesCommand extends Command
                     $recordJson = json_encode($record);
 
                     if ($ttl > 0) {
-                        Redis::setex($individualKey, $ttl, $recordJson);
+                        $redis->setex($individualKey, $ttl, $recordJson);
                     } else {
-                        Redis::set($individualKey, $recordJson);
+                        $redis->set($individualKey, $recordJson);
                     }
                     $individualCount++;
                 }
@@ -305,9 +305,9 @@ class ParseDatFilesCommand extends Command
             $metadataJson = json_encode($metadata);
 
             if ($ttl > 0) {
-                Redis::setex($metadataKey, $ttl, $metadataJson);
+                $redis->setex($metadataKey, $ttl, $metadataJson);
             } else {
-                Redis::set($metadataKey, $metadataJson);
+                $redis->set($metadataKey, $metadataJson);
             }
 
             $this->info("✓ Stored processing metadata in '{$metadataKey}'");
