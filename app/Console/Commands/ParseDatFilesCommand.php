@@ -14,7 +14,7 @@ class ParseDatFilesCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'files:parse-dat {--output=table : Output format (table, json, csv)} {--save : Save results to a file}';
+    protected $signature = 'files:parse-dat {--output=table : Output format (table, json, csv)} {--save : Save results to a file} {--redis : Store results in Redis}';
 
     /**
      * The console command description.
@@ -89,7 +89,7 @@ class ParseDatFilesCommand extends Command
 
         if ($allResults->isNotEmpty()) {
             $redisKey = 'dat:transactions'; // Or allow this as an --option if you prefer
-            $ttl = 60; // 1 hour (you can change or make it configurable)
+            $ttl = 3600; // 1 hour (you can change or make it configurable)
 
             $this->storeInRedis($allResults, $redisKey, $ttl);
             $this->displayRedisUsage($redisKey);
