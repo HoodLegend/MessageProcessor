@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Services\MessageProcessorService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
@@ -11,381 +12,308 @@ use Inertia\Inertia;
 
 class MessageController extends Controller
 {
-   private string $redisKey = "dat_transactions";
-
-
-
-    /**
-     * Get all transactions
+   /**
+     * Display a list of all CSV files and their data
      */
     public function index(Request $request)
     {
-        try {
-            $redisKey = $request->get('redis_key', $this->redisKey);
-            $data = Redis::get($redisKey);
+        $csvFiles = $this->getCsvFiles();
+        $selectedFile = $request->get('file');
+        $search = $request->get('search');
+        $dateFrom = $request->get('date_from');
+        $dateTo = $request->get('date_to');
+        $perPage = $request->get('per_page', 25);
 
-            if (!$data) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No transaction data found',
-                    'data' => []
-                ], 404);
+        $transactions = collect();
+        $totalAmount = 0;
+        $fileStats = [];
+
+        if ($selectedFile && Storage::exists("csv_exports/{$selectedFile}")) {
+            $transactions = $this->parseCSVFile($selectedFile);
+
+            // Apply filters
+            if ($search) {
+                $transactions = $this->filterTransactions($transactions, $search);
             }
 
-            $transactions = json_decode($data, true);
-
-            // Apply pagination if requested
-            $perPage = $request->get('per_page', null);
-            $page = $request->get('page', 1);
-
-            if ($perPage) {
-                $total = count($transactions);
-                $offset = ($page - 1) * $perPage;
-                $paginatedTransactions = array_slice($transactions, $offset, $perPage);
-
-                return response()->json([
-                    'success' => true,
-                    'data' => $paginatedTransactions,
-                    'pagination' => [
-                        'current_page' => (int) $page,
-                        'per_page' => (int) $perPage,
-                        'total' => $total,
-                        'last_page' => ceil($total / $perPage)
-                    ]
-                ]);
+            if ($dateFrom || $dateTo) {
+                $transactions = $this->filterByDateRange($transactions, $dateFrom, $dateTo);
             }
 
-            return response()->json([
-                'success' => true,
-                'data' => $transactions,
-                'total' => count($transactions)
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error retrieving transactions: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get a specific transaction by transaction ID
-     */
-    public function show(Request $request, string $transactionId)
-    {
-        try {
-            $redisKey = $request->get('redis_key', $this->redisKey);
-            $transactionKey = "{$redisKey}:transaction:{$transactionId}";
-            $data = Redis::get($transactionKey);
-
-            if (!$data) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Transaction not found',
-                    'transaction_id' => $transactionId
-                ], 404);
-            }
-
-            $transaction = json_decode($data, true);
-
-            return response()->json([
-                'success' => true,
-                'data' => $transaction
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error retrieving transaction: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-     /**
-     * Search transactions by various criteria
-     */
-    public function search(Request $request)
-    {
-        $validator = Validator::make($request->all(), [
-            'mobile_number' => 'nullable|string',
-            'date' => 'nullable|date_format:Y-m-d',
-            'date_from' => 'nullable|date_format:Y-m-d',
-            'date_to' => 'nullable|date_format:Y-m-d',
-            'amount' => 'nullable|numeric',
-            'amount_min' => 'nullable|numeric',
-            'amount_max' => 'nullable|numeric',
-            'file' => 'nullable|string',
-            'per_page' => 'nullable|integer|min:1|max:100',
-            'page' => 'nullable|integer|min:1',
-            'redis_key' => 'nullable|string'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Validation failed',
-                'errors' => $validator->errors()
-            ], 400);
-        }
-
-        try {
-            $redisKey = $request->get('redis_key', $this->redisKey);
-            $data = Redis::get($redisKey);
-
-            if (!$data) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No transaction data found',
-                    'data' => []
-                ], 404);
-            }
-
-            $transactions = json_decode($data, true);
-            $filtered = $this->filterTransactions($transactions, $request);
-
-            // Apply pagination if requested
-            $perPage = $request->get('per_page', null);
-            $page = $request->get('page', 1);
-
-            if ($perPage) {
-                $total = count($filtered);
-                $offset = ($page - 1) * $perPage;
-                $paginatedTransactions = array_slice($filtered, $offset, $perPage);
-
-                return response()->json([
-                    'success' => true,
-                    'data' => $paginatedTransactions,
-                    'pagination' => [
-                        'current_page' => (int) $page,
-                        'per_page' => (int) $perPage,
-                        'total' => $total,
-                        'last_page' => ceil($total / $perPage)
-                    ]
-                ]);
-            }
-
-            return response()->json([
-                'success' => true,
-                'data' => $filtered,
-                'total' => count($filtered)
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error searching transactions: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-        /**
-     * Get transactions by mobile number
-     */
-    public function getByMobile(Request $request, string $mobileNumber): JsonResponse
-    {
-        try {
-            $redisKey = $request->get('redis_key', $this->redisKey);
-            $data = Redis::get($redisKey);
-
-            if (!$data) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No transaction data found',
-                    'data' => []
-                ], 404);
-            }
-
-            $transactions = json_decode($data, true);
-            $filtered = array_filter($transactions, function($transaction) use ($mobileNumber) {
-                return $transaction['mobile_number'] === $mobileNumber;
+            // Calculate stats
+            $totalAmount = $transactions->sum(function($transaction) {
+                return (float) $transaction['amount'];
             });
 
-            return response()->json([
-                'success' => true,
-                'data' => array_values($filtered),
-                'total' => count($filtered),
-                'mobile_number' => $mobileNumber
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error retrieving transactions: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get transactions by date
-     */
-    public function getByDate(Request $request, string $date): JsonResponse
-    {
-        $validator = Validator::make(['date' => $date], [
-            'date' => 'required|date_format:Y-m-d'
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid date format. Use YYYY-MM-DD',
-                'errors' => $validator->errors()
-            ], 400);
-        }
-
-        try {
-            $redisKey = $request->get('redis_key', $this->redisKey);
-            $data = Redis::get($redisKey);
-
-            if (!$data) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No transaction data found',
-                    'data' => []
-                ], 404);
-            }
-
-            $transactions = json_decode($data, true);
-            $filtered = array_filter($transactions, function($transaction) use ($date) {
-                return $transaction['date'] === $date;
-            });
-
-            return response()->json([
-                'success' => true,
-                'data' => array_values($filtered),
-                'total' => count($filtered),
-                'date' => $date
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error retrieving transactions: ' . $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Get transaction statistics
-     */
-    public function stats(Request $request): JsonResponse
-    {
-        try {
-            $redisKey = $request->get('redis_key', $this->redisKey);
-
-            // Get metadata
-            $metadataKey = "{$redisKey}:metadata";
-            $metadataData = Redis::get($metadataKey);
-            $metadata = $metadataData ? json_decode($metadataData, true) : null;
-
-            // Get main data for additional calculations
-            $data = Redis::get($redisKey);
-
-            if (!$data) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'No transaction data found'
-                ], 404);
-            }
-
-            $transactions = json_decode($data, true);
-
-            // Calculate statistics
-            $amounts = array_column($transactions, 'amount');
-            $totalAmount = array_sum($amounts);
-            $averageAmount = count($amounts) > 0 ? $totalAmount / count($amounts) : 0;
-
-            $stats = [
-                'total_transactions' => count($transactions),
-                'total_amount' => round($totalAmount, 2),
-                'average_amount' => round($averageAmount, 2),
-                'min_amount' => count($amounts) > 0 ? min($amounts) : 0,
-                'max_amount' => count($amounts) > 0 ? max($amounts) : 0,
-                'unique_mobile_numbers' => count(array_unique(array_column($transactions, 'mobile_number'))),
-                'unique_dates' => count(array_unique(array_column($transactions, 'date'))),
-                'unique_files' => count(array_unique(array_column($transactions, 'file'))),
+            $fileStats = [
+                'total_records' => $transactions->count(),
+                'total_amount' => $totalAmount,
                 'date_range' => [
-                    'from' => min(array_column($transactions, 'date')),
-                    'to' => max(array_column($transactions, 'date'))
-                ]
+                    'from' => $transactions->min('date'),
+                    'to' => $transactions->max('date')
+                ],
+                'unique_mobiles' => $transactions->pluck('mobile_number')->unique()->count()
             ];
-
-            // Add metadata if available
-            if ($metadata) {
-                $stats['processed_at'] = $metadata['processed_at'];
-                $stats['files_processed'] = $metadata['files_processed'];
-            }
-
-            // Add Redis info
-            $ttl = Redis::ttl($redisKey);
-            $stats['redis_info'] = [
-                'key' => $redisKey,
-                'ttl' => $ttl > 0 ? $ttl : 'No expiration',
-                'memory_usage' => strlen($data) . ' bytes'
-            ];
-
-            return response()->json([
-                'success' => true,
-                'data' => $stats
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error retrieving statistics: ' . $e->getMessage()
-            ], 500);
         }
+
+        // Paginate results
+        $paginatedTransactions = $this->paginateCollection($transactions, $perPage, $request);
+
+        return inertia('Messages', [
+            'csvFiles' => $csvFiles,
+            'selectedFile' => $selectedFile,
+            'data' => $paginatedTransactions,
+            'filters' => [
+                'search' => $search,
+                'date_from' => $dateFrom,
+                'date_to' => $dateTo,
+                'per_page' => $perPage
+            ],
+            'fileStats' => $fileStats,
+            'totalAmount' => $totalAmount
+        ]);
     }
 
     /**
-     * Clear all transaction data
+     * Download a specific CSV file
      */
-    public function clear(Request $request): JsonResponse
+    public function download(Request $request)
     {
-        try {
-            $redisKey = $request->get('redis_key', $this->redisKey);
+        $fileName = $request->get('file');
 
-            // Get all keys related to this data
-            $keys = Redis::keys("{$redisKey}*");
-
-            if (empty($keys)) {
-                return response()->json([
-                    'success' => true,
-                    'message' => 'No data found to clear'
-                ]);
-            }
-
-            $deletedCount = Redis::del($keys);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'All transaction data cleared successfully',
-                'deleted_keys' => $deletedCount
-            ]);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Error clearing data: ' . $e->getMessage()
-            ], 500);
+        if (!$fileName || !Storage::exists("csv_exports/{$fileName}")) {
+            return redirect()->back()->with('error', 'File not found.');
         }
+
+        return Storage::download("csv_exports/{$fileName}");
     }
 
-
-
-      /**
-     * Remove transaction from main data array
+    /**
+     * Export filtered data to CSV
      */
-    private function removeFromMainData(string $redisKey, string $transactionId): void
+    public function export(Request $request)
     {
-        $data = Redis::get($redisKey);
-        if ($data) {
-            $transactions = json_decode($data, true);
-            $filtered = array_filter($transactions, function($transaction) use ($transactionId) {
-                return $transaction['transaction_id'] !== $transactionId;
-            });
+        $selectedFile = $request->get('file');
+        $search = $request->get('search');
+        $dateFrom = $request->get('date_from');
+        $dateTo = $request->get('date_to');
 
-            Redis::set($redisKey, json_encode(array_values($filtered)));
+        if (!$selectedFile || !Storage::exists("csv_exports/{$selectedFile}")) {
+            return redirect()->back()->with('error', 'File not found.');
         }
+
+        $transactions = $this->parseCSVFile($selectedFile);
+
+        // Apply filters
+        if ($search) {
+            $transactions = $this->filterTransactions($transactions, $search);
+        }
+
+        if ($dateFrom || $dateTo) {
+            $transactions = $this->filterByDateRange($transactions, $dateFrom, $dateTo);
+        }
+
+        // Generate CSV content
+        $csvContent = "File,Line,Date,Amount,Mobile Number,Transaction ID\n";
+        foreach ($transactions as $transaction) {
+            $csvContent .= sprintf(
+                "%s,%d,%s,%s,%s,%s\n",
+                $transaction['file'],
+                $transaction['line'],
+                $transaction['date'],
+                $transaction['amount'],
+                $transaction['mobile_number'],
+                $transaction['transaction_id']
+            );
+        }
+
+        $fileName = 'filtered_transactions_' . now()->format('Y-m-d_H-i-s') . '.csv';
+
+        return response($csvContent)
+            ->header('Content-Type', 'text/csv')
+            ->header('Content-Disposition', "attachment; filename=\"{$fileName}\"");
+    }
+
+    /**
+     * API endpoint to get transaction data as JSON
+     */
+    public function api(Request $request)
+    {
+        $selectedFile = $request->get('file');
+
+        if (!$selectedFile || !Storage::exists("csv_exports/{$selectedFile}")) {
+            return response()->json(['error' => 'File not found'], 404);
+        }
+
+        $transactions = $this->parseCSVFile($selectedFile);
+
+        // Apply filters
+        $search = $request->get('search');
+        $dateFrom = $request->get('date_from');
+        $dateTo = $request->get('date_to');
+
+        if ($search) {
+            $transactions = $this->filterTransactions($transactions, $search);
+        }
+
+        if ($dateFrom || $dateTo) {
+            $transactions = $this->filterByDateRange($transactions, $dateFrom, $dateTo);
+        }
+
+        return response()->json([
+            'data' => $transactions->values(),
+            'meta' => [
+                'total' => $transactions->count(),
+                'total_amount' => $transactions->sum(function($t) { return (float) $t['amount']; }),
+                'file' => $selectedFile
+            ]
+        ]);
+    }
+
+    /**
+     * Delete a CSV file
+     */
+    public function delete(Request $request)
+    {
+        $fileName = $request->get('file');
+
+        if (!$fileName || !Storage::exists("csv_exports/{$fileName}")) {
+            return redirect()->back()->with('error', 'File not found.');
+        }
+
+        Storage::delete("csv_exports/{$fileName}");
+
+        return redirect()->route('dat-transactions.index')
+            ->with('message', "File '{$fileName}' has been deleted successfully.");
+    }
+
+    /**
+     * Get all CSV files in the exports directory
+     */
+    private function getCsvFiles(): Collection
+    {
+        $files = Storage::files('csv_exports');
+
+        return collect($files)
+            ->filter(function ($file) {
+                return pathinfo($file, PATHINFO_EXTENSION) === 'csv';
+            })
+            ->map(function ($file) {
+                $fileName = basename($file);
+                $filePath = Storage::path($file);
+
+                return [
+                    'name' => $fileName,
+                    'size' => Storage::size($file),
+                    'last_modified' => Storage::lastModified($file),
+                    'formatted_size' => $this->formatBytes(Storage::size($file)),
+                    'formatted_date' => Carbon::createFromTimestamp(Storage::lastModified($file))->format('Y-m-d H:i:s')
+                ];
+            })
+            ->sortByDesc('last_modified')
+            ->values();
+    }
+
+    /**
+     * Parse a CSV file and return collection of transactions
+     */
+    private function parseCSVFile(string $fileName): Collection
+    {
+        $content = Storage::get("csv_exports/{$fileName}");
+        $lines = explode("\n", $content);
+
+        // Remove header line and empty lines
+        $dataLines = array_filter(array_slice($lines, 1), function($line) {
+            return !empty(trim($line));
+        });
+
+        $transactions = collect();
+
+        foreach ($dataLines as $line) {
+            $fields = str_getcsv($line);
+
+            if (count($fields) >= 6) {
+                $transactions->push([
+                    'file' => $fields[0],
+                    'line' => (int) $fields[1],
+                    'date' => $fields[2],
+                    'amount' => $fields[3],
+                    'mobile_number' => $fields[4],
+                    'transaction_id' => $fields[5]
+                ]);
+            }
+        }
+
+        return $transactions;
+    }
+
+    /**
+     * Filter transactions based on search term
+     */
+    private function filterTransactions(Collection $transactions, string $search): Collection
+    {
+        return $transactions->filter(function ($transaction) use ($search) {
+            return stripos($transaction['mobile_number'], $search) !== false ||
+                   stripos($transaction['transaction_id'], $search) !== false ||
+                   stripos($transaction['amount'], $search) !== false ||
+                   stripos($transaction['date'], $search) !== false;
+        });
+    }
+
+    /**
+     * Filter transactions by date range
+     */
+    private function filterByDateRange(Collection $transactions, ?string $dateFrom, ?string $dateTo): Collection
+    {
+        return $transactions->filter(function ($transaction) use ($dateFrom, $dateTo) {
+            $transactionDate = $transaction['date'];
+
+            if ($dateFrom && $transactionDate < $dateFrom) {
+                return false;
+            }
+
+            if ($dateTo && $transactionDate > $dateTo) {
+                return false;
+            }
+
+            return true;
+        });
+    }
+
+    /**
+     * Paginate a collection
+     */
+    private function paginateCollection(Collection $collection, int $perPage, Request $request)
+    {
+        $page = $request->get('page', 1);
+        $offset = ($page - 1) * $perPage;
+
+        $items = $collection->slice($offset, $perPage)->values();
+
+        return new \Illuminate\Pagination\LengthAwarePaginator(
+            $items,
+            $collection->count(),
+            $perPage,
+            $page,
+            [
+                'path' => $request->url(),
+                'pageName' => 'page',
+                'query' => $request->query()
+            ]
+        );
+    }
+
+    /**
+     * Format bytes to human readable format
+     */
+    private function formatBytes(int $bytes, int $precision = 2): string
+    {
+        $units = ['B', 'KB', 'MB', 'GB'];
+
+        for ($i = 0; $bytes > 1024 && $i < count($units) - 1; $i++) {
+            $bytes /= 1024;
+        }
+
+        return round($bytes, $precision) . ' ' . $units[$i];
     }
 }

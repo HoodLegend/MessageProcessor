@@ -3,7 +3,6 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Collection;
 
@@ -14,7 +13,7 @@ class ParseDatFilesCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'files:parse-dat {--output=table : Output format (table, json, csv)} {--save : Save results to a file} {--redis : Store results in Redis}';
+    protected $signature = 'files:parse-dat {--output=table : Output format (table, json, csv)} {--save : Save results to a file}';
 
     /**
      * The console command description.
@@ -41,7 +40,7 @@ class ParseDatFilesCommand extends Command
 
         // Get all .DAT files
         $datFiles = Storage::files($datFilesPath);
-        $datFiles = array_filter($datFiles, function ($file) {
+        $datFiles = array_filter($datFiles, function($file) {
             return pathinfo($file, PATHINFO_EXTENSION) === 'DAT';
         });
 
@@ -87,14 +86,6 @@ class ParseDatFilesCommand extends Command
 
         $this->info("\nSummary: Extracted {$totalRecords} transaction records from " . count($datFiles) . " file(s)");
 
-        if ($allResults->isNotEmpty()) {
-            $redisKey = 'dat:transactions'; // Or allow this as an --option if you prefer
-            $ttl = 3600; // 1 hour (you can change or make it configurable)
-
-            $this->storeInRedis($allResults, $redisKey, $ttl);
-            $this->displayRedisUsage($redisKey);
-        }
-
         return Command::SUCCESS;
     }
 
@@ -108,75 +99,47 @@ class ParseDatFilesCommand extends Command
         // Split content into lines and process each line
         $lines = explode("\n", $content);
 
-        // foreach ($lines as $lineNumber => $line) {
-        //     $line = trim($line);
-
-        //     // Skip empty lines
-        //     if (empty($line)) {
-        //         continue;
-        //     }
-
-        //     // Look for the pattern: YYYYMMDD followed by amount and mobile number
-        //     // Pattern: 20250710 00000000000000008800 812345678
-        //     if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
-        //         $dateStr = $matches[1];
-        //         $amountStr = $matches[2];
-        //         $mobileStr = $matches[3];
-
-        //         // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
-        //         $transactionId = '';
-        //         if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
-        //             $transactionId = trim($transMatches[1]);
-        //         }
-
-        //         // Parse date (YYYYMMDD to YYYY-MM-DD)
-        //         $date = $this->parseDate($dateStr);
-
-        //         // Parse amount (remove leading zeros and format as decimal)
-        //         $amount = $this->parseAmount($amountStr);
-
-        //         // Clean mobile number (remove leading zeros if any)
-        //         $mobileNumber = ltrim($mobileStr, '0');
-
-        //         $results->push([
-        //             'file' => $fileName,
-        //             'line' => $lineNumber + 1,
-        //             'date' => $date,
-        //             'amount' => $amount,
-        //             'mobile_number' => $mobileNumber,
-        //             'transaction_id' => $transactionId,
-        //             'raw_line' => $line
-        //         ]);
-        //     }
-        // }
-
         foreach ($lines as $lineNumber => $line) {
             $line = trim($line);
 
-            // Match the amount, mobile number, and transaction ID pattern
-            if (preg_match('/(\d{8}).*?(\d{20})(\d{10}).*?(\d{8})([A-Z0-9]{12})/', $line, $matches)) {
-                $dateStr = $matches[1];            // first date
-                $amountRaw = $matches[2];          // e.g., 0000000000000000030800
-                $mobileRaw = $matches[3];          // e.g., 0811111111
-                $transactionId = $matches[5];      // e.g., NAM0EPCD9AB
+            // Skip empty lines
+            if (empty($line)) {
+                continue;
+            }
 
-                $amount = number_format(((int) $amountRaw) / 100, 2, '.', '');
-                $mobileNumber = ltrim($mobileRaw, '0'); // remove leading zeros
+            // Look for the pattern: YYYYMMDD followed by amount and mobile number
+            // Pattern: 20250710 00000000000000008800 812345678
+            if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
+                $dateStr = $matches[1];
+                $amountStr = $matches[2];
+                $mobileStr = $matches[3];
+
+                // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
+                $transactionId = '';
+                if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
+                    $transactionId = trim($transMatches[1]);
+                }
+
+                // Parse date (YYYYMMDD to YYYY-MM-DD)
+                $date = $this->parseDate($dateStr);
+
+                // Parse amount (remove leading zeros and format as decimal)
+                $amount = $this->parseAmount($amountStr);
+
+                // Clean mobile number (remove leading zeros if any)
+                $mobileNumber = ltrim($mobileStr, '0');
 
                 $results->push([
                     'file' => $fileName,
                     'line' => $lineNumber + 1,
-                    'date' => $this->parseDate($dateStr),
+                    'date' => $date,
                     'amount' => $amount,
                     'mobile_number' => $mobileNumber,
                     'transaction_id' => $transactionId,
                     'raw_line' => $line
                 ]);
-            } else {
-                $this->warn("No match in line {$lineNumber}: {$line}");
             }
         }
-
 
         return $results;
     }
@@ -204,7 +167,7 @@ class ParseDatFilesCommand extends Command
         }
 
         // Convert to decimal (assuming last 2 digits are cents)
-        $amountValue = (int) $amount;
+        $amountValue = (int)$amount;
         return number_format($amountValue / 100, 2, '.', '');
     }
 
@@ -235,7 +198,7 @@ class ParseDatFilesCommand extends Command
 
             default: // table
                 $headers = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
-                $rows = $results->map(function ($record) {
+                $rows = $results->map(function($record) {
                     return [
                         $record['file'],
                         $record['line'],
@@ -252,88 +215,86 @@ class ParseDatFilesCommand extends Command
     }
 
     /**
-     * Store results in Redis
+     * Save results to CSV file (always executed)
      */
-    private function storeInRedis(Collection $results, string $redisKey, int $ttl): void
+    private function saveToCsv(Collection $results): string
     {
-        try {
-            $this->info("Storing results in Redis...");
-            $redis = Redis::connection();
-            // Store as JSON string
-            $jsonData = $results->toJson();
+        $timestamp = now()->format('Y-m-d_H-i-s');
+        $fileName = "dat_transactions_{$timestamp}.csv";
+        $filePath = "csv_exports/{$fileName}";
 
-            if ($ttl > 0) {
-                $redis->setex($redisKey, $ttl, $jsonData);
-                $this->info("✓ Stored {$results->count()} records in Redis key '{$redisKey}' with TTL of {$ttl} seconds");
-            } else {
-                $redis->set($redisKey, $jsonData);
-                $this->info("✓ Stored {$results->count()} records in Redis key '{$redisKey}' (no expiration)");
-            }
+        // Create the directory if it doesn't exist
+        Storage::makeDirectory('csv_exports');
 
-            // Also store individual transactions by transaction ID for easy lookup
-            $individualCount = 0;
-            foreach ($results as $record) {
-                if (!empty($record['transaction_id'])) {
-                    $individualKey = "{$redisKey}:transaction:{$record['transaction_id']}";
-                    $recordJson = json_encode($record);
+        // Prepare CSV content
+        $csvContent = "File,Line,Date,Amount,Mobile Number,Transaction ID\n";
 
-                    if ($ttl > 0) {
-                        $redis->setex($individualKey, $ttl, $recordJson);
-                    } else {
-                        $redis->set($individualKey, $recordJson);
-                    }
-                    $individualCount++;
-                }
-            }
-
-            if ($individualCount > 0) {
-                $this->info("✓ Also stored {$individualCount} individual transaction records for quick lookup");
-            }
-
-            // Store metadata
-            $metadata = [
-                'total_records' => $results->count(),
-                'processed_at' => now()->toISOString(),
-                'files_processed' => $results->groupBy('file')->keys()->toArray(),
-                'date_range' => [
-                    'from' => $results->min('date'),
-                    'to' => $results->max('date')
-                ]
-            ];
-
-            $metadataKey = "{$redisKey}:metadata";
-            $metadataJson = json_encode($metadata);
-
-            if ($ttl > 0) {
-                $redis->setex($metadataKey, $ttl, $metadataJson);
-            } else {
-                $redis->set($metadataKey, $metadataJson);
-            }
-
-            $this->info("✓ Stored processing metadata in '{$metadataKey}'");
-
-        } catch (\Exception $e) {
-            $this->error("Failed to store results in Redis: " . $e->getMessage());
-            $this->info("Make sure Redis is running and properly configured in your .env file");
+        foreach ($results as $record) {
+            $csvContent .= sprintf(
+                "%s,%d,%s,%s,%s,%s\n",
+                $this->escapeCsvField($record['file']),
+                $record['line'],
+                $record['date'],
+                $record['amount'],
+                $record['mobile_number'],
+                $this->escapeCsvField($record['transaction_id'])
+            );
         }
+
+        Storage::put($filePath, $csvContent);
+
+        return Storage::path($filePath);
     }
 
     /**
-     * Display Redis usage examples
+     * Escape CSV field if it contains commas, quotes, or newlines
      */
-    private function displayRedisUsage(string $redisKey): void
+    private function escapeCsvField(string $field): string
     {
-        $this->info("\nRedis Usage Examples:");
-        $this->line("# Get all transactions:");
-        $this->line("Redis::get('{$redisKey}')");
-        $this->line("");
-        $this->line("# Get specific transaction (replace TRANSACTION_ID):");
-        $this->line("Redis::get('{$redisKey}:transaction:TRANSACTION_ID')");
-        $this->line("");
-        $this->line("# Get metadata:");
-        $this->line("Redis::get('{$redisKey}:metadata')");
-        $this->line("");
-        $this->line("# Check if key exists:");
-        $this->line("Redis::exists('{$redisKey}')");
+        // If field contains comma, quote, or newline, wrap in quotes and escape internal quotes
+        if (strpos($field, ',') !== false || strpos($field, '"') !== false || strpos($field, "\n") !== false) {
+            return '"' . str_replace('"', '""', $field) . '"';
+        }
+        return $field;
+    }
+
+    /**
+     * Save results to a file
+     */
+    private function saveResults(Collection $results, string $format): void
+    {
+        $timestamp = now()->format('Y-m-d_H-i-s');
+        $fileName = "dat_parse_results_{$timestamp}";
+
+        switch ($format) {
+            case 'json':
+                $content = json_encode($results->toArray(), JSON_PRETTY_PRINT);
+                $fileName .= '.json';
+                break;
+
+            case 'csv':
+                $content = "File,Line,Date,Amount,Mobile Number,Transaction ID\n";
+                foreach ($results as $record) {
+                    $content .= sprintf(
+                        "%s,%d,%s,%s,%s,%s\n",
+                        $record['file'],
+                        $record['line'],
+                        $record['date'],
+                        $record['amount'],
+                        $record['mobile_number'],
+                        $record['transaction_id']
+                    );
+                }
+                $fileName .= '.csv';
+                break;
+
+            default:
+                $content = $results->toJson();
+                $fileName .= '.json';
+                break;
+        }
+
+        Storage::put("parsed_results/{$fileName}", $content);
+        $this->info("Results saved to: storage/app/parsed_results/{$fileName}");
     }
 }

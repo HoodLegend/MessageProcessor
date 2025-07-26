@@ -24,6 +24,7 @@ Schedule::command('files:move-dat')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
+    ->appendOutputTo("logs/data_from_DATfile_logs")
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
     })
@@ -31,10 +32,13 @@ Schedule::command('files:move-dat')
         \Log::error('Scheduled message processing failed');
     });
 
+
+
 Schedule::command('files:parse-dat')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
+    ->appendOutputTo("logs/parsed_data_from_DatFile_logs")
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
     })
