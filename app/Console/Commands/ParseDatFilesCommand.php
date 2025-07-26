@@ -99,45 +99,72 @@ class ParseDatFilesCommand extends Command
         // Split content into lines and process each line
         $lines = explode("\n", $content);
 
+        // foreach ($lines as $lineNumber => $line) {
+        //     $line = trim($line);
+
+        //     // Skip empty lines
+        //     if (empty($line)) {
+        //         continue;
+        //     }
+
+        //     // Look for the pattern: YYYYMMDD followed by amount and mobile number
+        //     // Pattern: 20250710 00000000000000008800 812345678
+        //     if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
+        //         $dateStr = $matches[1];
+        //         $amountStr = $matches[2];
+        //         $mobileStr = $matches[3];
+
+        //         // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
+        //         $transactionId = '';
+        //         if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
+        //             $transactionId = trim($transMatches[1]);
+        //         }
+
+        //         // Parse date (YYYYMMDD to YYYY-MM-DD)
+        //         $date = $this->parseDate($dateStr);
+
+        //         // Parse amount (remove leading zeros and format as decimal)
+        //         $amount = $this->parseAmount($amountStr);
+
+        //         // Clean mobile number (remove leading zeros if any)
+        //         $mobileNumber = ltrim($mobileStr, '0');
+
+        //         $results->push([
+        //             'file' => $fileName,
+        //             'line' => $lineNumber + 1,
+        //             'date' => $date,
+        //             'amount' => $amount,
+        //             'mobile_number' => $mobileNumber,
+        //             'transaction_id' => $transactionId,
+        //             'raw_line' => $line
+        //         ]);
+        //     }
+        // }
+
         foreach ($lines as $lineNumber => $line) {
             $line = trim($line);
 
-            // Skip empty lines
-            if (empty($line)) {
-                continue;
-            }
+            // Match the amount, mobile number, and transaction ID pattern
+            if (preg_match('/(\d{8}).*?(\d{20})(\d{10}).*?(\d{8})([A-Z0-9]{12})/', $line, $matches)) {
+                $dateStr = $matches[1];            // first date
+                $amountRaw = $matches[2];          // e.g., 0000000000000000030800
+                $mobileRaw = $matches[3];          // e.g., 0811111111
+                $transactionId = $matches[5];      // e.g., NAM0EPCD9AB
 
-            // Look for the pattern: YYYYMMDD followed by amount and mobile number
-            // Pattern: 20250710 00000000000000008800 812345678
-            if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
-                $dateStr = $matches[1];
-                $amountStr = $matches[2];
-                $mobileStr = $matches[3];
-
-                // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
-                $transactionId = '';
-                if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
-                    $transactionId = trim($transMatches[1]);
-                }
-
-                // Parse date (YYYYMMDD to YYYY-MM-DD)
-                $date = $this->parseDate($dateStr);
-
-                // Parse amount (remove leading zeros and format as decimal)
-                $amount = $this->parseAmount($amountStr);
-
-                // Clean mobile number (remove leading zeros if any)
-                $mobileNumber = ltrim($mobileStr, '0');
+                $amount = number_format(((int) $amountRaw) / 100, 2, '.', '');
+                $mobileNumber = ltrim($mobileRaw, '0'); // remove leading zeros
 
                 $results->push([
                     'file' => $fileName,
                     'line' => $lineNumber + 1,
-                    'date' => $date,
+                    'date' => $this->parseDate($dateStr),
                     'amount' => $amount,
                     'mobile_number' => $mobileNumber,
                     'transaction_id' => $transactionId,
                     'raw_line' => $line
                 ]);
+            } else {
+                $this->warn("No match in line {$lineNumber}: {$line}");
             }
         }
 
