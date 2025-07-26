@@ -242,50 +242,6 @@ class ParseDatFilesCommand extends Command
     }
 
     /**
-     * Save results to CSV file (always executed)
-     */
-    private function saveToCsv(Collection $results): string
-    {
-        $timestamp = now()->format('Y-m-d_H-i-s');
-        $fileName = "dat_transactions_{$timestamp}.csv";
-        $filePath = "csv_exports/{$fileName}";
-
-        // Create the directory if it doesn't exist
-        Storage::makeDirectory('csv_exports');
-
-        // Prepare CSV content
-        $csvContent = "File,Line,Date,Amount,Mobile Number,Transaction ID\n";
-
-        foreach ($results as $record) {
-            $csvContent .= sprintf(
-                "%s,%d,%s,%s,%s,%s\n",
-                $this->escapeCsvField($record['file']),
-                $record['line'],
-                $record['date'],
-                $record['amount'],
-                $record['mobile_number'],
-                $this->escapeCsvField($record['transaction_id'])
-            );
-        }
-
-        Storage::put($filePath, $csvContent);
-
-        return Storage::path($filePath);
-    }
-
-    /**
-     * Escape CSV field if it contains commas, quotes, or newlines
-     */
-    private function escapeCsvField(string $field): string
-    {
-        // If field contains comma, quote, or newline, wrap in quotes and escape internal quotes
-        if (strpos($field, ',') !== false || strpos($field, '"') !== false || strpos($field, "\n") !== false) {
-            return '"' . str_replace('"', '""', $field) . '"';
-        }
-        return $field;
-    }
-
-    /**
      * Save results to a file
      */
     private function saveResults(Collection $results, string $format): void
@@ -325,3 +281,30 @@ class ParseDatFilesCommand extends Command
         $this->info("Results saved to: storage/app/parsed_results/{$fileName}");
     }
 }
+
+// foreach ($lines as $lineNumber => $line) {
+//             $line = trim($line);
+
+//             // Match the amount, mobile number, and transaction ID pattern
+//             if (preg_match('/(\d{8}).*?(\d{20})(\d{10}).*?(\d{8})([A-Z0-9]{12})/', $line, $matches)) {
+//                 $dateStr = $matches[1];            // first date
+//                 $amountRaw = $matches[2];          // e.g., 0000000000000000030800
+//                 $mobileRaw = $matches[3];          // e.g., 0811111111
+//                 $transactionId = $matches[5];      // e.g., NAM0EPCD9AB
+
+//                 $amount = number_format(((int) $amountRaw) / 100, 2, '.', '');
+//                 $mobileNumber = ltrim($mobileRaw, '0'); // remove leading zeros
+
+//                 $results->push([
+//                     'file' => $fileName,
+//                     'line' => $lineNumber + 1,
+//                     'date' => $this->parseDate($dateStr),
+//                     'amount' => $amount,
+//                     'mobile_number' => $mobileNumber,
+//                     'transaction_id' => $transactionId,
+//                     'raw_line' => $line
+//                 ]);
+//             } else {
+//                 $this->warn("No match in line {$lineNumber}: {$line}");
+//             }
+//         }
