@@ -60,7 +60,7 @@ class ParseDatFilesCommand extends Command
 
             try {
                 $content = Storage::get($filePath);
-                $results = $this->parseFileContent($content, $fileName);
+                $results = $this->parseFileContentUpdated($content, $fileName);
                 $allResults = $allResults->merge($results);
                 $totalRecords += count($results);
 
@@ -90,63 +90,266 @@ class ParseDatFilesCommand extends Command
     }
 
 /**
- * Parse the content of a DAT file with enhanced debugging
+ * Parse the content of a DAT file - Fixed for your specific format
  */
-private function parseFileContent(string $content, string $fileName): Collection
+// private function parseFileContent(string $content, string $fileName): Collection
+// {
+//     $results = collect();
+
+//     // Split content into lines and process each line
+//     $lines = explode("\n", $content);
+
+//     $this->info("Debug: Processing {$fileName} with " . count($lines) . " lines");
+
+//     foreach ($lines as $lineNumber => $line) {
+//         $line = trim($line);
+
+//         // Skip empty lines
+//         if (empty($line)) {
+//             continue;
+//         }
+
+//         // Debug: Show first few lines to understand the format
+//         if ($lineNumber < 3) {
+//             $this->line("Debug Line " . ($lineNumber + 1) . ": " . $line);
+//         }
+
+//         $record = $this->extractTransactionData($line, $fileName, $lineNumber);
+
+//         if ($record) {
+//             $results->push($record);
+//             $this->line("Debug: Extracted - Date: {$record['date']}, Amount: {$record['amount']}, Mobile: {$record['mobile_number']}, TransID: {$record['transaction_id']}");
+//         }
+//     }
+
+//     return $results;
+// }
+
+/**
+ * Main parsing method that handles multiple transactions per line
+ */
+private function parseLineForTransactions(string $line, string $fileName, int $lineNumber): Collection
 {
     $results = collect();
 
-    // Split content into lines and process each line
+    // Your format: 2025050800000000000000039000816111111 20250508NAM01EXYTABC
+    // Step 1: Find all data patterns (date + amount + mobile)
+    preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $line, $dataMatches, PREG_SET_ORDER);
+
+    // Step 2: Find all transaction ID patterns (date + alphanumeric)
+    preg_match_all('/(\d{8})([A-Z0-9]{5,})/', $line, $idMatches, PREG_SET_ORDER);
+
+    // Step 3: Match them up by date
+    foreach ($dataMatches as $dataMatch) {
+        $date = $dataMatch[1];
+        $amountStr = $dataMatch[2];
+        $mobileStr = $dataMatch[3];
+
+        // Find corresponding transaction ID with same date
+        $transactionId = '';
+        foreach ($idMatches as $idMatch) {
+            if ($idMatch[1] === $date) {
+                $transactionId = $idMatch[2];
+                break;
+            }
+        }
+
+        // Parse the data
+        $parsedDate = $this->parseDate($date);
+        $amount = $this->parseAmountFromPaddedString($amountStr);
+        $mobileNumber = ltrim($mobileStr, '0');
+
+        $results->push([
+            'file' => $fileName,
+            'line' => $lineNumber + 1,
+            'date' => $parsedDate,
+            'amount' => $amount,
+            'mobile_number' => $mobileNumber,
+            'transaction_id' => $transactionId,
+            'raw_line' => $line
+        ]);
+
+        $this->line("Debug: Found transaction - Date: {$parsedDate}, Amount: {$amount}, Mobile: {$mobileNumber}, TransID: {$transactionId}");
+    }
+
+    return $results;
+}
+
+/**
+ * Updated parseFileContent to use the new parsing method
+ */
+private function parseFileContentUpdated(string $content, string $fileName): Collection
+{
+    $results = collect();
     $lines = explode("\n", $content);
 
-    $this->info("Debug: Processing {$fileName} with " . count($lines) . " lines");
+    $this->info("Processing {$fileName} with " . count($lines) . " lines");
 
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
 
-        // Skip empty lines
         if (empty($line)) {
             continue;
         }
 
-        // Debug: Show first few lines to understand the format
-        if ($lineNumber < 5) {
-            $this->line("Debug Line " . ($lineNumber + 1) . ": " . substr($line, 0, 100) . (strlen($line) > 100 ? '...' : ''));
+        // Debug: Show first few lines
+        if ($lineNumber < 3) {
+            $this->line("Line " . ($lineNumber + 1) . ": " . substr($line, 0, 100) . (strlen($line) > 100 ? '...' : ''));
         }
 
-        // Try multiple patterns to handle different DAT file formats
-
-        // Pattern 1: Original pattern - 20250710 00000000000000008800 812345678
-        if (preg_match('/(\d{8})\s*(\d{20})\s*(\d{10})/', $line, $matches)) {
-            $this->processMatch($matches, $line, $fileName, $lineNumber, $results, 'Pattern 1');
-            continue;
-        }
-
-        // Pattern 2: More flexible spacing
-        if (preg_match('/(\d{8})\s+(\d+)\s+(\d{9,12})/', $line, $matches)) {
-            $this->processMatch($matches, $line, $fileName, $lineNumber, $results, 'Pattern 2');
-            continue;
-        }
-
-        // Pattern 3: Look for any 8-digit date followed by numbers
-        if (preg_match('/(\d{8}).*?(\d{10,20}).*?(\d{9,12})/', $line, $matches)) {
-            $this->processMatch($matches, $line, $fileName, $lineNumber, $results, 'Pattern 3');
-            continue;
-        }
-
-        // Pattern 4: Tab-separated values
-        if (preg_match('/(\d{8})\t+(\d+)\t+(\d{9,12})/', $line, $matches)) {
-            $this->processMatch($matches, $line, $fileName, $lineNumber, $results, 'Pattern 4');
-            continue;
-        }
-
-        // If no pattern matches, log it for debugging
-        if ($lineNumber < 10) { // Only show first 10 unmatched lines to avoid spam
-            $this->warn("Debug: No pattern matched for line " . ($lineNumber + 1) . ": " . substr($line, 0, 50));
-        }
+        // Parse this line for transactions
+        $lineResults = $this->parseLineForTransactions($line, $fileName, $lineNumber);
+        $results = $results->merge($lineResults);
     }
 
     return $results;
+}
+
+
+/**
+ * Extract transaction data from the line based on your specific format
+ */
+private function extractTransactionData(string $line, string $fileName, int $lineNumber): ?array
+{
+    // Look for the pattern: YYYYMMDD followed by amount and mobile number
+    // Pattern: 2025050800000000000000039000816111111
+    // Where: 20250508 (date) + 00000000000000039000 (amount) + 816111111 (mobile)
+
+    if (preg_match('/(\d{8})(\d{20})(\d{9,10})/', $line, $matches)) {
+        $dateStr = $matches[1];
+        $amountStr = $matches[2];
+        $mobileStr = $matches[3];
+
+        // Extract transaction ID - pattern: YYYYMMDDNAM01EXYTABC or similar
+        $transactionId = '';
+        if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
+            // Get everything after the 8-digit date
+            $fullMatch = $transMatches[1];
+            $transactionId = substr($fullMatch, 8); // Remove the date part
+        }
+
+        // Parse date (YYYYMMDD to YYYY-MM-DD)
+        $date = $this->parseDate($dateStr);
+
+        // Parse amount - find the actual amount in the padded string
+        $amount = $this->parseAmountFromPaddedString($amountStr);
+
+        // Clean mobile number (remove leading zeros)
+        $mobileNumber = ltrim($mobileStr, '0');
+
+        return [
+            'file' => $fileName,
+            'line' => $lineNumber + 1,
+            'date' => $date,
+            'amount' => $amount,
+            'mobile_number' => $mobileNumber,
+            'transaction_id' => $transactionId,
+            'raw_line' => $line
+        ];
+    }
+
+    return null;
+}
+
+
+/**
+ * Parse amount from the padded 20-digit string
+ * Example: 00000000000000039000 should become 39.00
+ */
+private function parseAmountFromPaddedString(string $amountStr): string
+{
+    // Remove all leading zeros
+    $amount = ltrim($amountStr, '0');
+
+    if (empty($amount)) {
+        return '0.00';
+    }
+
+    // Convert to integer
+    $amountValue = (int)$amount;
+
+    // The amount appears to be in cents format (3900 = 39.00)
+    // So we need to divide by 100
+    return number_format($amountValue / 100, 2, '.', '');
+}
+
+
+/**
+ * Alternative parsing method if the above doesn't work perfectly
+ * This looks for multiple patterns in the same line
+ */
+private function extractTransactionDataAlternative(string $line, string $fileName, int $lineNumber): ?array
+{
+    $results = [];
+
+    // First, find all date-amount-mobile patterns: YYYYMMDDAAAAAAAAAAAAAAAAAAAAMMMMMMMMM
+    if (preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $line, $matches, PREG_SET_ORDER)) {
+        foreach ($matches as $match) {
+            $dateStr = $match[1];
+            $amountStr = $match[2];
+            $mobileStr = $match[3];
+
+            // For each match, try to find a corresponding transaction ID
+            $transactionId = '';
+
+            // Look for transaction ID pattern that starts with the same date
+            if (preg_match('/' . $dateStr . '([A-Z0-9]+)/', $line, $transMatches)) {
+                $transactionId = $transMatches[1];
+            }
+
+            $results[] = [
+                'file' => $fileName,
+                'line' => $lineNumber + 1,
+                'date' => $this->parseDate($dateStr),
+                'amount' => $this->parseAmountFromPaddedString($amountStr),
+                'mobile_number' => ltrim($mobileStr, '0'),
+                'transaction_id' => $transactionId,
+                'raw_line' => $line
+            ];
+        }
+    }
+
+    return empty($results) ? null : $results[0]; // Return first match for now
+}
+
+/**
+ * Enhanced parsing that handles your specific example
+ */
+private function parseSpecificFormat(string $line): array
+{
+    $transactions = [];
+
+    // Your example: 2025050800000000000000039000816111111 20250508NAM01EXYTABC
+    // Pattern 1: Date + Amount + Mobile (continuous digits)
+    preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $line, $dataMatches, PREG_SET_ORDER);
+
+    // Pattern 2: Date + Transaction ID (date followed by alphanumeric)
+    preg_match_all('/(\d{8})([A-Z0-9]+)/', $line, $idMatches, PREG_SET_ORDER);
+
+    // Match them up by date
+    foreach ($dataMatches as $dataMatch) {
+        $date = $dataMatch[1];
+        $amount = $this->parseAmountFromPaddedString($dataMatch[2]);
+        $mobile = ltrim($dataMatch[3], '0');
+
+        // Find corresponding transaction ID with same date
+        $transactionId = '';
+        foreach ($idMatches as $idMatch) {
+            if ($idMatch[1] === $date) {
+                $transactionId = $idMatch[2];
+                break;
+            }
+        }
+
+        $transactions[] = [
+            'date' => $this->parseDate($date),
+            'amount' => $amount,
+            'mobile_number' => $mobile,
+            'transaction_id' => $transactionId
+        ];
+    }
+
+    return $transactions;
 }
 
     /**
