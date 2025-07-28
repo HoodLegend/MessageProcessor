@@ -100,55 +100,48 @@ private function parseFileContent(string $content, string $fileName): Collection
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
 
-        // Extract content only between AUTH CANCELLED and BIS     XNN
-        $start = strpos($line, 'AUTH CANCELLED');
-        $end = strpos($line, 'BIS     XNN');
+        // Match everything between AUTH CANCELLED and BIS     XNN (with flexible spacing)
+        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s+BIS\s+XNN/i', $line, $segmentMatch)) {
+            $segment = $segmentMatch[1];
 
-        if ($start === false || $end === false || $end <= $start) {
-            $this->warn("Skipping line {$lineNumber}: Missing AUTH CANCELLED or BIS     XNN");
-            continue;
-        }
+            // Match transaction: Date (8 digits) + Amount (20 digits) + Mobile (10 digits)
+            if (preg_match('/(\d{8})(\d{20})(\d{10})/', $segment, $matches)) {
+                $dateRaw = $matches[1];
+                $amountRaw = $matches[2];
+                $mobileRaw = $matches[3];
 
-        $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
-        $segment = trim($segment);
+                $cleanAmount = ltrim($amountRaw, '0');
+                $amountInt = $cleanAmount === '' ? 0 : (int) $cleanAmount;
+                $amount = number_format($amountInt / 100, 2, '.', '');
 
-        // Match the transaction segment: Date + 20-digit Amount + 10-digit Mobile Number
-        if (preg_match('/(\d{8})(\d{20})(\d{10})/', $segment, $matches)) {
-            $dateRaw = $matches[1];
-            $amountRaw = $matches[2];
-            $mobileRaw = $matches[3];
+                $mobile = $mobileRaw;
 
-            // Clean and format amount
-            $cleanAmount = ltrim($amountRaw, '0');
-            $amountInt = $cleanAmount === '' ? 0 : (int) $cleanAmount;
-            $amount = number_format($amountInt / 100, 2, '.', '');
+                // Try to extract transaction ID (e.g., starts with same date)
+                $transactionId = '';
+                if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z0-9]{5,})/', $segment, $transMatch)) {
+                    $transactionId = trim($transMatch[1]);
+                }
 
-            $mobile = $mobileRaw;
-
-            // Extract transaction ID — look for something like: 20250710NAM0ABCDE1FG
-            $transactionId = '';
-            if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z0-9]{5,20})/', $segment, $transMatch)) {
-                $transactionId = trim($transMatch[1]);
-            } elseif (preg_match('/([A-Z0-9]{10,})/', $segment, $transMatch)) {
-                $transactionId = trim($transMatch[1]);
+                $results->push([
+                    'file' => $fileName,
+                    'line' => $lineNumber + 1,
+                    'date' => $this->parseDate($dateRaw),
+                    'amount' => $amount,
+                    'mobile_number' => $mobile,
+                    'transaction_id' => $transactionId,
+                    'raw_line' => $line
+                ]);
+            } else {
+                $this->warn("No transaction match in line {$lineNumber}: {$line}");
             }
-
-            $results->push([
-                'file' => $fileName,
-                'line' => $lineNumber + 1,
-                'date' => $this->parseDate($dateRaw),
-                'amount' => $amount,
-                'mobile_number' => $mobile,
-                'transaction_id' => $transactionId,
-                'raw_line' => $line
-            ]);
         } else {
-            $this->warn("No match in line {$lineNumber}: {$segment}");
+            $this->warn("Skipping line {$lineNumber}: Missing AUTH CANCELLED or BIS     XNN");
         }
     }
 
     return $results;
 }
+
 
 
     /**
