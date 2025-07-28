@@ -206,38 +206,32 @@ private function parseFileContentUpdated(string $content, string $fileName): Col
  */
 private function extractTransactionData(string $line, string $fileName, int $lineNumber): ?array
 {
-    // Look for the pattern: YYYYMMDD followed by amount and mobile number
-    // Pattern: 2025050800000000000000039000816111111
-    // Where: 20250508 (date) + 00000000000000039000 (amount) + 816111111 (mobile)
+    $start = strpos($line, 'AUTH CANCELLED');
+    $end = strpos($line, 'BIS     XNN');
 
-    if (preg_match('/(\d{8})(\d{20})(\d{9,10})/', $line, $matches)) {
+    if ($start === false || $end === false || $end <= $start) {
+        return null;
+    }
+
+    $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
+
+    if (preg_match('/(\d{8})(\d{20})(\d{9,10})/', $segment, $matches)) {
         $dateStr = $matches[1];
         $amountStr = $matches[2];
         $mobileStr = $matches[3];
 
-        // Extract transaction ID - pattern: YYYYMMDDNAM01EXYTABC or similar
+        // Extract transaction ID from segment (same logic)
         $transactionId = '';
-        if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
-            // Get everything after the 8-digit date
-            $fullMatch = $transMatches[1];
-            $transactionId = substr($fullMatch, 8); // Remove the date part
+        if (preg_match('/' . $dateStr . '([A-Z0-9]+)/', $segment, $transMatches)) {
+            $transactionId = $transMatches[1];
         }
-
-        // Parse date (YYYYMMDD to YYYY-MM-DD)
-        $date = $this->parseDate($dateStr);
-
-        // Parse amount - find the actual amount in the padded string
-        $amount = $this->parseAmountFromPaddedString($amountStr);
-
-        // Clean mobile number (remove leading zeros)
-        $mobileNumber = ltrim($mobileStr, '0');
 
         return [
             'file' => $fileName,
             'line' => $lineNumber + 1,
-            'date' => $date,
-            'amount' => $amount,
-            'mobile_number' => $mobileNumber,
+            'date' => $this->parseDate($dateStr),
+            'amount' => $this->parseAmountFromPaddedString($amountStr),
+            'mobile_number' => ltrim($mobileStr, '0'),
             'transaction_id' => $transactionId,
             'raw_line' => $line
         ];
@@ -277,19 +271,30 @@ private function extractTransactionDataAlternative(string $line, string $fileNam
 {
     $results = [];
 
-    // First, find all date-amount-mobile patterns: YYYYMMDDAAAAAAAAAAAAAAAAAAAAMMMMMMMMM
-    if (preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $line, $matches, PREG_SET_ORDER)) {
+    // Extract the segment between AUTH CANCELLED and BIS     XNN
+    $start = strpos($line, 'AUTH CANCELLED');
+    $end = strpos($line, 'BIS     XNN');
+    $segment = '';
+
+    if ($start !== false && $end !== false && $end > $start) {
+        $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
+    } else {
+        return null; // If the expected segment isn't present, skip
+    }
+
+    // Look for all date-amount-mobile patterns in the segment
+    if (preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $segment, $matches, PREG_SET_ORDER)) {
         foreach ($matches as $match) {
             $dateStr = $match[1];
             $amountStr = $match[2];
             $mobileStr = $match[3];
 
-            // For each match, try to find a corresponding transaction ID
+            // Try to extract a transaction ID in this segment starting with the date
             $transactionId = '';
-
-            // Look for transaction ID pattern that starts with the same date
-            if (preg_match('/' . $dateStr . '([A-Z0-9]+)/', $line, $transMatches)) {
-                $transactionId = $transMatches[1];
+            if (preg_match('/' . preg_quote($dateStr, '/') . '([A-Z0-9]+)/', $segment, $transMatches)) {
+                $transactionId = trim($transMatches[1]);
+            } elseif (preg_match('/([A-Z0-9]{10,})/', $segment, $transMatches)) {
+                $transactionId = trim($transMatches[1]);
             }
 
             $results[] = [
@@ -307,6 +312,7 @@ private function extractTransactionDataAlternative(string $line, string $fileNam
     return empty($results) ? null : $results[0]; // Return first match for now
 }
 
+
 /**
  * Enhanced parsing that handles your specific example
  */
@@ -314,20 +320,23 @@ private function parseSpecificFormat(string $line): array
 {
     $transactions = [];
 
-    // Your example: 2025050800000000000000039000816111111 20250508NAM01EXYTABC
-    // Pattern 1: Date + Amount + Mobile (continuous digits)
-    preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $line, $dataMatches, PREG_SET_ORDER);
+    $start = strpos($line, 'AUTH CANCELLED');
+    $end = strpos($line, 'BIS     XNN');
 
-    // Pattern 2: Date + Transaction ID (date followed by alphanumeric)
-    preg_match_all('/(\d{8})([A-Z0-9]+)/', $line, $idMatches, PREG_SET_ORDER);
+    if ($start === false || $end === false || $end <= $start) {
+        return [];
+    }
 
-    // Match them up by date
+    $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
+
+    preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $segment, $dataMatches, PREG_SET_ORDER);
+    preg_match_all('/(\d{8})([A-Z0-9]+)/', $segment, $idMatches, PREG_SET_ORDER);
+
     foreach ($dataMatches as $dataMatch) {
         $date = $dataMatch[1];
         $amount = $this->parseAmountFromPaddedString($dataMatch[2]);
         $mobile = ltrim($dataMatch[3], '0');
 
-        // Find corresponding transaction ID with same date
         $transactionId = '';
         foreach ($idMatches as $idMatch) {
             if ($idMatch[1] === $date) {
@@ -346,6 +355,7 @@ private function parseSpecificFormat(string $line): array
 
     return $transactions;
 }
+
 
     /**
      * Parse date from YYYYMMDD format to YYYY-MM-DD
@@ -369,24 +379,30 @@ private function processMatch(array $matches, string $line, string $fileName, in
 
     $this->line("Debug: {$patternName} matched - Date: {$dateStr}, Amount: {$amountStr}, Mobile: {$mobileStr}");
 
-    // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
+    // Only consider the part between AUTH CANCELLED and BIS     XNN
+    $start = strpos($line, 'AUTH CANCELLED');
+    $end = strpos($line, 'BIS     XNN');
+    $segment = '';
+
+    if ($start !== false && $end !== false && $end > $start) {
+        $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
+    }
+
+    // Extract transaction ID from segment
     $transactionId = '';
-    if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
+    if ($segment && preg_match('/' . preg_quote($dateStr, '/') . '([A-Z0-9]+)/', $segment, $transMatches)) {
         $transactionId = trim($transMatches[1]);
-    } else {
-        // Try to extract any alphanumeric string that might be a transaction ID
-        if (preg_match('/([A-Z0-9]{10,})/', $line, $transMatches)) {
-            $transactionId = trim($transMatches[1]);
-        }
+    } elseif ($segment && preg_match('/([A-Z0-9]{10,})/', $segment, $transMatches)) {
+        $transactionId = trim($transMatches[1]);
     }
 
     // Parse date (YYYYMMDD to YYYY-MM-DD)
     $date = $this->parseDate($dateStr);
 
-    // Parse amount (remove leading zeros and format as decimal)
+    // Parse amount
     $amount = $this->parseAmount($amountStr);
 
-    // Clean mobile number (remove leading zeros if any)
+    // Clean mobile number
     $mobileNumber = ltrim($mobileStr, '0');
 
     $results->push([
@@ -400,6 +416,7 @@ private function processMatch(array $matches, string $line, string $fileName, in
         'pattern_used' => $patternName
     ]);
 }
+
 
     /**
  * Enhanced amount parsing with better handling
