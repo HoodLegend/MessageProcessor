@@ -97,31 +97,44 @@ class ParseDatFilesCommand extends Command
         $results = collect();
         $lines = explode("\n", $content);
 
-        foreach ($lines as $lineNumber => $line) {
-            $line = trim($line);
+ foreach ($lines as $lineNumber => $line) {
+        $line = trim($line);
 
-            if (preg_match('/(\d{8}).*?(\d{20})(\d{10}).*?(\d{8})([A-Z0-9]{12})/', $line, $matches)) {
-                $dateStr = $matches[1];
-                $amountRaw = $matches[2];
-                $mobileRaw = $matches[3];
-                $transactionId = $matches[5];
+        // Match the primary block: 8 digits (date) + 20 digits (amount) + 10 digits (mobile)
+        if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
+            $dateRaw = $matches[1];
+            $amountRaw = $matches[2];
+            $mobileRaw = $matches[3];
 
-                $amount = number_format(((int) $amountRaw) / 100, 2, '.', '');
-                $mobileNumber = ltrim($mobileRaw, '0');
+            // Parse date
+            $date = $this->parseDate($dateRaw);
 
-                $results->push([
-                    'file' => $fileName,
-                    'line' => $lineNumber + 1,
-                    'date' => $this->parseDate($dateStr),
-                    'amount' => $amount,
-                    'mobile_number' => $mobileNumber,
-                    'transaction_id' => $transactionId,
-                    'raw_line' => $line
-                ]);
-            } else {
-                $this->warn("No match in line {$lineNumber}: {$line}");
+            // Parse amount (last non-zero digits from the 20-digit amount)
+            $amountInt = (int) ltrim($amountRaw, '0');
+            $amount = number_format($amountInt / 100, 2, '.', '');
+
+            // Normalize mobile number
+            $mobile = $mobileRaw;
+
+            // Find transaction ID: after second date (YYYYMMDD) followed by 12 characters (transaction ID)
+            $transactionId = '';
+            if (preg_match('/\d{8}([A-Z0-9 ]{12})/', $line, $transMatch)) {
+                $transactionId = trim($transMatch[1]);
             }
+
+            $results->push([
+                'file' => $fileName,
+                'line' => $lineNumber + 1,
+                'date' => $date,
+                'amount' => $amount,
+                'mobile_number' => $mobile,
+                'transaction_id' => $transactionId,
+                'raw_line' => $line
+            ]);
+        } else {
+            $this->warn("No match in line {$lineNumber}: {$line}");
         }
+    }
 
         return $results;
     }
