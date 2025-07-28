@@ -100,11 +100,21 @@ private function parseFileContent(string $content, string $fileName): Collection
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
 
-        // Match everything between "AUTH CANCELLED" and the next 14-digit timestamp + INTERNET
-        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s+\d{14}INTERNET/i', $line, $segmentMatch)) {
-            $segment = trim($segmentMatch[1]);
+        if (empty($line)) {
+            continue;
+        }
 
-            // Match: 8-digit date, 20-digit amount, 10-digit mobile number (may have varying spaces in between)
+        // Check if line contains both required markers
+        if (stripos($line, 'AUTH CANCELLED') === false || stripos($line, 'INTERNET') === false) {
+            continue;
+        }
+
+        // More flexible pattern - capture everything between AUTH CANCELLED and any 14-digit number followed by INTERNET
+        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s*(\d{14}).*?INTERNET/i', $line, $segmentMatch)) {
+            $segment = trim($segmentMatch[1]);
+            $timestamp = $segmentMatch[2];
+
+            // Look for date-amount-mobile pattern in the segment
             if (preg_match('/(\d{8})\s*(\d{20})\s*(\d{10})/', $segment, $matches)) {
                 $dateRaw = $matches[1];
                 $amountRaw = $matches[2];
@@ -113,9 +123,9 @@ private function parseFileContent(string $content, string $fileName): Collection
                 $cleanAmount = ltrim($amountRaw, '0');
                 $amount = number_format(((int)($cleanAmount ?: '0')) / 100, 2, '.', '');
 
-                // Try to extract transaction ID that follows the date
+                // Extract transaction ID - look for the pattern after the date
                 $transactionId = '';
-                if (preg_match('/' . preg_quote($dateRaw, '/') . '\s*([A-Z0-9]{5,})/', $segment, $tm)) {
+                if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z0-9]{5,})/', $segment, $tm)) {
                     $transactionId = trim($tm[1]);
                 }
 
@@ -128,11 +138,7 @@ private function parseFileContent(string $content, string $fileName): Collection
                     'transaction_id' => $transactionId,
                     'raw_line' => $line
                 ]);
-            } else {
-                $this->warn("No transaction match in scoped segment on line {$lineNumber}: {$segment}");
             }
-        } else {
-            $this->warn("Skipping line {$lineNumber}: missing AUTH CANCELLED → timestamp+INTERNET segment");
         }
     }
 
