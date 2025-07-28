@@ -100,26 +100,21 @@ private function parseFileContent(string $content, string $fileName): Collection
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
 
-        // Match everything between AUTH CANCELLED and BIS     XNN (with flexible spacing)
-        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s+BIS\s+XNN/i', $line, $segmentMatch)) {
-            $segment = $segmentMatch[1];
+        // Scope to between AUTH CANCELLED and the timestamp+INTERNET marker
+        if (preg_match('/AUTH CANCELLED\s+(.*?)\s+\d{14}INTERNET/', $line, $segmentMatch)) {
+            $segment = trim($segmentMatch[1]);
 
-            // Match transaction: Date (8 digits) + Amount (20 digits) + Mobile (10 digits)
             if (preg_match('/(\d{8})(\d{20})(\d{10})/', $segment, $matches)) {
                 $dateRaw = $matches[1];
                 $amountRaw = $matches[2];
                 $mobileRaw = $matches[3];
 
                 $cleanAmount = ltrim($amountRaw, '0');
-                $amountInt = $cleanAmount === '' ? 0 : (int) $cleanAmount;
-                $amount = number_format($amountInt / 100, 2, '.', '');
+                $amount = number_format(((int)($cleanAmount ?: '0')) / 100, 2, '.', '');
 
-                $mobile = $mobileRaw;
-
-                // Try to extract transaction ID (e.g., starts with same date)
                 $transactionId = '';
-                if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z0-9]{5,})/', $segment, $transMatch)) {
-                    $transactionId = trim($transMatch[1]);
+                if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z0-9]{5,})/', $segment, $tm)) {
+                    $transactionId = trim($tm[1]);
                 }
 
                 $results->push([
@@ -127,20 +122,21 @@ private function parseFileContent(string $content, string $fileName): Collection
                     'line' => $lineNumber + 1,
                     'date' => $this->parseDate($dateRaw),
                     'amount' => $amount,
-                    'mobile_number' => $mobile,
+                    'mobile_number' => $mobileRaw,
                     'transaction_id' => $transactionId,
                     'raw_line' => $line
                 ]);
             } else {
-                $this->warn("No transaction match in line {$lineNumber}: {$line}");
+                $this->warn("No transaction match in scoped segment on line {$lineNumber}: {$segment}");
             }
         } else {
-            $this->warn("Skipping line {$lineNumber}: Missing AUTH CANCELLED or BIS     XNN");
+            $this->warn("Skipping line {$lineNumber}: missing AUTH CANCELLED → timestamp+INTERNET segment");
         }
     }
 
     return $results;
 }
+
 
 
 
