@@ -13,9 +13,7 @@ class ParseDatFilesCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'files:parse-dat
-        {--output=table : Output format (table, json, csv)}
-        {--save : Save results to CSV file in storage}';
+    protected $signature = 'files:parse-dat {--output=table : Output format (table, json, csv)} {--save : Save results to a file}';
 
     /**
      * The console command description.
@@ -33,14 +31,16 @@ class ParseDatFilesCommand extends Command
         $outputFormat = $this->option('output');
         $saveResults = $this->option('save');
 
+        // Check if dat_files directory exists
         if (!Storage::exists($datFilesPath)) {
             $this->error("DAT files directory does not exist: storage/app/{$datFilesPath}");
             $this->info("Please run 'php artisan files:move-dat' first to move DAT files to storage.");
             return Command::FAILURE;
         }
 
+        // Get all .DAT files
         $datFiles = Storage::files($datFilesPath);
-        $datFiles = array_filter($datFiles, function ($file) {
+        $datFiles = array_filter($datFiles, function($file) {
             return pathinfo($file, PATHINFO_EXTENSION) === 'DAT';
         });
 
@@ -81,7 +81,7 @@ class ParseDatFilesCommand extends Command
 
         // Save results if requested
         if ($saveResults) {
-            $this->saveResults($allResults);
+            $this->saveResults($allResults, $outputFormat);
         }
 
         $this->info("\nSummary: Extracted {$totalRecords} transaction records from " . count($datFiles) . " file(s)");
@@ -95,49 +95,57 @@ class ParseDatFilesCommand extends Command
     private function parseFileContent(string $content, string $fileName): Collection
     {
         $results = collect();
+
+        // Split content into lines and process each line
         $lines = explode("\n", $content);
 
-foreach ($lines as $lineNumber => $line) {
-        $line = trim($line);
+        foreach ($lines as $lineNumber => $line) {
+            $line = trim($line);
 
-        // Match the transaction segment: Date + 20-digit Amount + 10-digit Mobile Number
-        if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
-            $dateRaw = $matches[1];        // e.g. 20250508
-            $amountRaw = $matches[2];      // e.g. 000000000000000003900
-            $mobileRaw = $matches[3];      // e.g. 0816111111
-
-            // Remove leading zeros from amount (this handles variable-length amounts)
-            $cleanAmount = ltrim($amountRaw, '0');
-            $amountInt = $cleanAmount === '' ? 0 : (int) $cleanAmount;
-            $amount = number_format($amountInt / 100, 2, '.', '');
-
-            $mobile = $mobileRaw;
-
-            // Extract transaction ID: look for second date + 12-character ID
-            $transactionId = '';
-            if (preg_match('/\d{8}([A-Z0-9 ]{12})/', $line, $transMatch)) {
-                $transactionId = trim($transMatch[1]);
+            // Skip empty lines
+            if (empty($line)) {
+                continue;
             }
 
-            $results->push([
-                'file' => $fileName,
-                'line' => $lineNumber + 1,
-                'date' => $this->parseDate($dateRaw),
-                'amount' => $amount,
-                'mobile_number' => $mobile,
-                'transaction_id' => $transactionId,
-                'raw_line' => $line
-            ]);
-        } else {
-            $this->warn("No match in line {$lineNumber}: {$line}");
+            // Look for the pattern: YYYYMMDD followed by amount and mobile number
+            // Pattern: 20250710 00000000000000008800 812345678
+            if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
+                $dateStr = $matches[1];
+                $amountStr = $matches[2];
+                $mobileStr = $matches[3];
+
+                // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
+                $transactionId = '';
+                if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
+                    $transactionId = trim($transMatches[1]);
+                }
+
+                // Parse date (YYYYMMDD to YYYY-MM-DD)
+                $date = $this->parseDate($dateStr);
+
+                // Parse amount (remove leading zeros and format as decimal)
+                $amount = $this->parseAmount($amountStr);
+
+                // Clean mobile number (remove leading zeros if any)
+                $mobileNumber = ltrim($mobileStr, '0');
+
+                $results->push([
+                    'file' => $fileName,
+                    'line' => $lineNumber + 1,
+                    'date' => $date,
+                    'amount' => $amount,
+                    'mobile_number' => $mobileNumber,
+                    'transaction_id' => $transactionId,
+                    'raw_line' => $line
+                ]);
+            }
         }
-    }
 
         return $results;
     }
 
     /**
-     * Parse date from YYYYMMDD to YYYY-MM-DD
+     * Parse date from YYYYMMDD format to YYYY-MM-DD
      */
     private function parseDate(string $dateStr): string
     {
@@ -145,6 +153,22 @@ foreach ($lines as $lineNumber => $line) {
             return substr($dateStr, 0, 4) . '-' . substr($dateStr, 4, 2) . '-' . substr($dateStr, 6, 2);
         }
         return $dateStr;
+    }
+
+    /**
+     * Parse amount from padded string to decimal format
+     */
+    private function parseAmount(string $amountStr): string
+    {
+        // Remove leading zeros and convert to decimal (divide by 100 for cents)
+        $amount = ltrim($amountStr, '0');
+        if (empty($amount)) {
+            return '0.00';
+        }
+
+        // Convert to decimal (assuming last 2 digits are cents)
+        $amountValue = (int)$amount;
+        return number_format($amountValue / 100, 2, '.', '');
     }
 
     /**
@@ -174,7 +198,7 @@ foreach ($lines as $lineNumber => $line) {
 
             default: // table
                 $headers = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
-                $rows = $results->map(function ($record) {
+                $rows = $results->map(function($record) {
                     return [
                         $record['file'],
                         $record['line'],
@@ -191,43 +215,86 @@ foreach ($lines as $lineNumber => $line) {
     }
 
     /**
-     * Save results to a CSV file in storage/app/exports/
+     * Save results to CSV file (always executed)
      */
-    private function saveResults(Collection $results): void
+    private function saveToCsv(Collection $results): string
     {
-        $directory = 'exports';
+        $timestamp = now()->format('Y-m-d_H-i-s');
+        $fileName = "dat_transactions_{$timestamp}.csv";
+        $filePath = "csv_exports/{$fileName}";
 
-        if (!Storage::exists($directory)) {
-            Storage::makeDirectory($directory);
-        }
+        // Create the directory if it doesn't exist
+        Storage::makeDirectory('csv_exports');
 
-        $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
-        $filePath = "{$directory}/{$filename}";
+        // Prepare CSV content
+        $csvContent = "File,Line,Date,Amount,Mobile Number,Transaction ID\n";
 
-        $csvData = [];
-
-        // Header
-        $csvData[] = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
-
-        // Data rows
         foreach ($results as $record) {
-            $csvData[] = [
-                $record['file'],
+            $csvContent .= sprintf(
+                "%s,%d,%s,%s,%s,%s\n",
+                $this->escapeCsvField($record['file']),
                 $record['line'],
                 $record['date'],
                 $record['amount'],
                 $record['mobile_number'],
-                $record['transaction_id']
-            ];
+                $this->escapeCsvField($record['transaction_id'])
+            );
         }
 
-        // Convert array to CSV string
-        $csvString = collect($csvData)->map(function ($row) {
-            return implode(',', $row);
-        })->implode("\n");
+        Storage::put($filePath, $csvContent);
 
-        Storage::put($filePath, $csvString);
+        return Storage::path($filePath);
+    }
 
-        $this->info("✓ Results saved to storage/app/{$filePath}");
+    /**
+     * Escape CSV field if it contains commas, quotes, or newlines
+     */
+    private function escapeCsvField(string $field): string
+    {
+        // If field contains comma, quote, or newline, wrap in quotes and escape internal quotes
+        if (strpos($field, ',') !== false || strpos($field, '"') !== false || strpos($field, "\n") !== false) {
+            return '"' . str_replace('"', '""', $field) . '"';
+        }
+        return $field;
+    }
+
+    /**
+     * Save results to a file
+     */
+    private function saveResults(Collection $results, string $format): void
+    {
+        $timestamp = now()->format('Y-m-d_H-i-s');
+        $fileName = "dat_parse_results_{$timestamp}";
+
+        switch ($format) {
+            case 'json':
+                $content = json_encode($results->toArray(), JSON_PRETTY_PRINT);
+                $fileName .= '.json';
+                break;
+
+            case 'csv':
+                $content = "File,Line,Date,Amount,Mobile Number,Transaction ID\n";
+                foreach ($results as $record) {
+                    $content .= sprintf(
+                        "%s,%d,%s,%s,%s,%s\n",
+                        $record['file'],
+                        $record['line'],
+                        $record['date'],
+                        $record['amount'],
+                        $record['mobile_number'],
+                        $record['transaction_id']
+                    );
+                }
+                $fileName .= '.csv';
+                break;
+
+            default:
+                $content = $results->toJson();
+                $fileName .= '.json';
+                break;
+        }
+
+        Storage::put("parsed_results/{$fileName}", $content);
+        $this->info("Results saved to: storage/app/parsed_results/{$fileName}");
     }
 }
