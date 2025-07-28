@@ -13,7 +13,7 @@ class ParseDatFilesCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'files:parse-dat {--output=table : Output format (table, json, csv)} {--save : Save results to a file}';
+    protected $signature = 'files:parse-dat {--output=table : Output format (table, json, csv)} {--save : Save results to a file} {--v|verbose : Show debug output}';
 
     /**
      * The console command description.
@@ -89,60 +89,65 @@ class ParseDatFilesCommand extends Command
         return Command::SUCCESS;
     }
 
-    /**
-     * Parse the content of a DAT file
-     */
-    private function parseFileContent(string $content, string $fileName): Collection
-    {
-        $results = collect();
+/**
+ * Parse the content of a DAT file with enhanced debugging
+ */
+private function parseFileContent(string $content, string $fileName): Collection
+{
+    $results = collect();
 
-        // Split content into lines and process each line
-        $lines = explode("\n", $content);
+    // Split content into lines and process each line
+    $lines = explode("\n", $content);
 
-        foreach ($lines as $lineNumber => $line) {
-            $line = trim($line);
+    $this->info("Debug: Processing {$fileName} with " . count($lines) . " lines");
 
-            // Skip empty lines
-            if (empty($line)) {
-                continue;
-            }
+    foreach ($lines as $lineNumber => $line) {
+        $line = trim($line);
 
-            // Look for the pattern: YYYYMMDD followed by amount and mobile number
-            // Pattern: 20250710 00000000000000008800 812345678
-            if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
-                $dateStr = $matches[1];
-                $amountStr = $matches[2];
-                $mobileStr = $matches[3];
-
-                // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
-                $transactionId = '';
-                if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
-                    $transactionId = trim($transMatches[1]);
-                }
-
-                // Parse date (YYYYMMDD to YYYY-MM-DD)
-                $date = $this->parseDate($dateStr);
-
-                // Parse amount (remove leading zeros and format as decimal)
-                $amount = $this->parseAmount($amountStr);
-
-                // Clean mobile number (remove leading zeros if any)
-                $mobileNumber = ltrim($mobileStr, '0');
-
-                $results->push([
-                    'file' => $fileName,
-                    'line' => $lineNumber + 1,
-                    'date' => $date,
-                    'amount' => $amount,
-                    'mobile_number' => $mobileNumber,
-                    'transaction_id' => $transactionId,
-                    'raw_line' => $line
-                ]);
-            }
+        // Skip empty lines
+        if (empty($line)) {
+            continue;
         }
 
-        return $results;
+        // Debug: Show first few lines to understand the format
+        if ($lineNumber < 5) {
+            $this->line("Debug Line " . ($lineNumber + 1) . ": " . substr($line, 0, 100) . (strlen($line) > 100 ? '...' : ''));
+        }
+
+        // Try multiple patterns to handle different DAT file formats
+
+        // Pattern 1: Original pattern - 20250710 00000000000000008800 812345678
+        if (preg_match('/(\d{8})\s*(\d{20})\s*(\d{10})/', $line, $matches)) {
+            $this->processMatch($matches, $line, $fileName, $lineNumber, $results, 'Pattern 1');
+            continue;
+        }
+
+        // Pattern 2: More flexible spacing
+        if (preg_match('/(\d{8})\s+(\d+)\s+(\d{9,12})/', $line, $matches)) {
+            $this->processMatch($matches, $line, $fileName, $lineNumber, $results, 'Pattern 2');
+            continue;
+        }
+
+        // Pattern 3: Look for any 8-digit date followed by numbers
+        if (preg_match('/(\d{8}).*?(\d{10,20}).*?(\d{9,12})/', $line, $matches)) {
+            $this->processMatch($matches, $line, $fileName, $lineNumber, $results, 'Pattern 3');
+            continue;
+        }
+
+        // Pattern 4: Tab-separated values
+        if (preg_match('/(\d{8})\t+(\d+)\t+(\d{9,12})/', $line, $matches)) {
+            $this->processMatch($matches, $line, $fileName, $lineNumber, $results, 'Pattern 4');
+            continue;
+        }
+
+        // If no pattern matches, log it for debugging
+        if ($lineNumber < 10) { // Only show first 10 unmatched lines to avoid spam
+            $this->warn("Debug: No pattern matched for line " . ($lineNumber + 1) . ": " . substr($line, 0, 50));
+        }
     }
+
+    return $results;
+}
 
     /**
      * Parse date from YYYYMMDD format to YYYY-MM-DD
@@ -156,20 +161,71 @@ class ParseDatFilesCommand extends Command
     }
 
     /**
-     * Parse amount from padded string to decimal format
-     */
-    private function parseAmount(string $amountStr): string
-    {
-        // Remove leading zeros and convert to decimal (divide by 100 for cents)
-        $amount = ltrim($amountStr, '0');
-        if (empty($amount)) {
-            return '0.00';
-        }
+ * Process a regex match and add to results
+ */
+private function processMatch(array $matches, string $line, string $fileName, int $lineNumber, Collection $results, string $patternName): void
+{
+    $dateStr = $matches[1];
+    $amountStr = $matches[2];
+    $mobileStr = $matches[3];
 
-        // Convert to decimal (assuming last 2 digits are cents)
-        $amountValue = (int)$amount;
-        return number_format($amountValue / 100, 2, '.', '');
+    $this->line("Debug: {$patternName} matched - Date: {$dateStr}, Amount: {$amountStr}, Mobile: {$mobileStr}");
+
+    // Extract transaction ID - look for pattern like "20250710NAM0ABCDE1FG"
+    $transactionId = '';
+    if (preg_match('/(\d{8}[A-Z0-9]+)/', $line, $transMatches)) {
+        $transactionId = trim($transMatches[1]);
+    } else {
+        // Try to extract any alphanumeric string that might be a transaction ID
+        if (preg_match('/([A-Z0-9]{10,})/', $line, $transMatches)) {
+            $transactionId = trim($transMatches[1]);
+        }
     }
+
+    // Parse date (YYYYMMDD to YYYY-MM-DD)
+    $date = $this->parseDate($dateStr);
+
+    // Parse amount (remove leading zeros and format as decimal)
+    $amount = $this->parseAmount($amountStr);
+
+    // Clean mobile number (remove leading zeros if any)
+    $mobileNumber = ltrim($mobileStr, '0');
+
+    $results->push([
+        'file' => $fileName,
+        'line' => $lineNumber + 1,
+        'date' => $date,
+        'amount' => $amount,
+        'mobile_number' => $mobileNumber,
+        'transaction_id' => $transactionId,
+        'raw_line' => $line,
+        'pattern_used' => $patternName
+    ]);
+}
+
+    /**
+ * Enhanced amount parsing with better handling
+ */
+private function parseAmount(string $amountStr): string
+{
+    // Remove leading zeros
+    $amount = ltrim($amountStr, '0');
+    if (empty($amount)) {
+        return '0.00';
+    }
+
+    // Handle different amount formats
+    $amountValue = (int)$amount;
+
+    // If the amount seems too large (more than 6 digits), assume last 2 digits are cents
+    if ($amountValue > 999999) {
+        return number_format($amountValue / 100, 2, '.', '');
+    } else {
+        // Otherwise, treat as whole currency units
+        return number_format($amountValue, 2, '.', '');
+    }
+}
+
 
     /**
      * Display results in the specified format
@@ -297,4 +353,31 @@ class ParseDatFilesCommand extends Command
         Storage::put("parsed_results/{$fileName}", $content);
         $this->info("Results saved to: storage/app/parsed_results/{$fileName}");
     }
+
+    /**
+ * Add a method to show file content sample for debugging
+ */
+private function debugFileContent(string $content, string $fileName): void
+{
+    $this->info("=== DEBUG: Content sample from {$fileName} ===");
+
+    // Show file size
+    $this->line("File size: " . strlen($content) . " bytes");
+
+    // Show first 500 characters
+    $sample = substr($content, 0, 500);
+    $this->line("First 500 characters:");
+    $this->line($sample);
+
+    // Show line count and first few lines
+    $lines = explode("\n", $content);
+    $this->line("Total lines: " . count($lines));
+
+    $this->line("First 5 lines:");
+    for ($i = 0; $i < min(5, count($lines)); $i++) {
+        $this->line("Line " . ($i + 1) . ": " . trim($lines[$i]));
+    }
+
+    $this->line("=== END DEBUG ===\n");
+}
 }
