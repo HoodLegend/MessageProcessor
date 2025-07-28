@@ -132,48 +132,43 @@ private function parseLineForTransactions(string $line, string $fileName, int $l
 {
     $results = collect();
 
-    // Your format: 2025050800000000000000039000816111111 20250508NAM01EXYTABC
-    // Step 1: Find all data patterns (date + amount + mobile)
-    preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $line, $dataMatches, PREG_SET_ORDER);
+    // 1. Narrow the string to only the part after AUTH CANCELLED and before BIS XNN
+    if (preg_match('/AUTH CANCELLED(.*?)BIS\s+XNN/', $line, $sectionMatch)) {
+        $transactionSection = $sectionMatch[1];
 
-    // Step 2: Find all transaction ID patterns (date + alphanumeric)
-    preg_match_all('/(\d{8})([A-Z0-9]{5,})/', $line, $idMatches, PREG_SET_ORDER);
+        // 2. Now extract the relevant transaction data
+        if (preg_match('/(\d{8})(0{10,}\d{3,})(\d{10})\s+(\d{8})(NAM[0-9A-Z]{11})/', $transactionSection, $matches)) {
+            $date = $matches[1];               // e.g. 20250508
+            $amountStr = $matches[2];          // e.g. 0000000000000000180000
+            $mobileStr = $matches[3];          // e.g. 0816260547
+            $transactionId = $matches[5];      // e.g. NAM03DWWTXQB
 
-    // Step 3: Match them up by date
-    foreach ($dataMatches as $dataMatch) {
-        $date = $dataMatch[1];
-        $amountStr = $dataMatch[2];
-        $mobileStr = $dataMatch[3];
+            // Parse and clean data
+            $parsedDate = $this->parseDate($date);
+            $amount = $this->parseAmountFromPaddedString($amountStr);
+            $mobileNumber = ltrim($mobileStr, '0');
 
-        // Find corresponding transaction ID with same date
-        $transactionId = '';
-        foreach ($idMatches as $idMatch) {
-            if ($idMatch[1] === $date) {
-                $transactionId = $idMatch[2];
-                break;
-            }
+            $results->push([
+                'file' => $fileName,
+                'line' => $lineNumber + 1,
+                'date' => $parsedDate,
+                'amount' => $amount,
+                'mobile_number' => $mobileNumber,
+                'transaction_id' => $transactionId,
+                'raw_line' => $line
+            ]);
+
+            $this->line("✓ Parsed transaction — Date: {$parsedDate}, Amount: {$amount}, Mobile: {$mobileNumber}, TxID: {$transactionId}");
+        } else {
+            $this->warn("⚠ No transaction match in trimmed section on line {$lineNumber}");
         }
-
-        // Parse the data
-        $parsedDate = $this->parseDate($date);
-        $amount = $this->parseAmountFromPaddedString($amountStr);
-        $mobileNumber = ltrim($mobileStr, '0');
-
-        $results->push([
-            'file' => $fileName,
-            'line' => $lineNumber + 1,
-            'date' => $parsedDate,
-            'amount' => $amount,
-            'mobile_number' => $mobileNumber,
-            'transaction_id' => $transactionId,
-            'raw_line' => $line
-        ]);
-
-        $this->line("Debug: Found transaction - Date: {$parsedDate}, Amount: {$amount}, Mobile: {$mobileNumber}, TransID: {$transactionId}");
+    } else {
+        $this->warn("⚠ Could not find AUTH CANCELLED → BIS XNN block on line {$lineNumber}");
     }
 
     return $results;
 }
+
 
 /**
  * Updated parseFileContent to use the new parsing method
