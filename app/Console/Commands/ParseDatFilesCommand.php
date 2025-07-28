@@ -97,26 +97,23 @@ class ParseDatFilesCommand extends Command
         $results = collect();
         $lines = explode("\n", $content);
 
- foreach ($lines as $lineNumber => $line) {
+foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
 
-        // Match the primary block: 8 digits (date) + 20 digits (amount) + 10 digits (mobile)
+        // Match the transaction segment: Date + 20-digit Amount + 10-digit Mobile Number
         if (preg_match('/(\d{8})(\d{20})(\d{10})/', $line, $matches)) {
-            $dateRaw = $matches[1];
-            $amountRaw = $matches[2];
-            $mobileRaw = $matches[3];
+            $dateRaw = $matches[1];        // e.g. 20250508
+            $amountRaw = $matches[2];      // e.g. 000000000000000003900
+            $mobileRaw = $matches[3];      // e.g. 0816111111
 
-            // Parse date
-            $date = $this->parseDate($dateRaw);
-
-            // Parse amount (last non-zero digits from the 20-digit amount)
-            $amountInt = (int) ltrim($amountRaw, '0');
+            // Remove leading zeros from amount (this handles variable-length amounts)
+            $cleanAmount = ltrim($amountRaw, '0');
+            $amountInt = $cleanAmount === '' ? 0 : (int) $cleanAmount;
             $amount = number_format($amountInt / 100, 2, '.', '');
 
-            // Normalize mobile number
             $mobile = $mobileRaw;
 
-            // Find transaction ID: after second date (YYYYMMDD) followed by 12 characters (transaction ID)
+            // Extract transaction ID: look for second date + 12-character ID
             $transactionId = '';
             if (preg_match('/\d{8}([A-Z0-9 ]{12})/', $line, $transMatch)) {
                 $transactionId = trim($transMatch[1]);
@@ -125,7 +122,7 @@ class ParseDatFilesCommand extends Command
             $results->push([
                 'file' => $fileName,
                 'line' => $lineNumber + 1,
-                'date' => $date,
+                'date' => $this->parseDate($dateRaw),
                 'amount' => $amount,
                 'mobile_number' => $mobile,
                 'transaction_id' => $transactionId,
