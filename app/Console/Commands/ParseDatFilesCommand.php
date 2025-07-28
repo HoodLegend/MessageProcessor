@@ -13,7 +13,9 @@ class ParseDatFilesCommand extends Command
      *
      * @var string
      */
-    protected $signature = 'files:parse-dat {--output=table : Output format (table, json, csv)} {--save : Save results to a file}';
+    protected $signature = 'files:parse-dat
+        {--output=table : Output format (table, json, csv)}
+        {--save : Save results to CSV file in storage}';
 
     /**
      * The console command description.
@@ -31,16 +33,14 @@ class ParseDatFilesCommand extends Command
         $outputFormat = $this->option('output');
         $saveResults = $this->option('save');
 
-        // Check if dat_files directory exists
         if (!Storage::exists($datFilesPath)) {
             $this->error("DAT files directory does not exist: storage/app/{$datFilesPath}");
             $this->info("Please run 'php artisan files:move-dat' first to move DAT files to storage.");
             return Command::FAILURE;
         }
 
-        // Get all .DAT files
         $datFiles = Storage::files($datFilesPath);
-        $datFiles = array_filter($datFiles, function($file) {
+        $datFiles = array_filter($datFiles, function ($file) {
             return pathinfo($file, PATHINFO_EXTENSION) === 'DAT';
         });
 
@@ -60,7 +60,7 @@ class ParseDatFilesCommand extends Command
 
             try {
                 $content = Storage::get($filePath);
-                $results = $this->parseFileContentUpdated($content, $fileName);
+                $results = $this->parseFileContent($content, $fileName);
                 $allResults = $allResults->merge($results);
                 $totalRecords += count($results);
 
@@ -81,7 +81,7 @@ class ParseDatFilesCommand extends Command
 
         // Save results if requested
         if ($saveResults) {
-            $this->saveResults($allResults, $outputFormat);
+            $this->saveResults($allResults);
         }
 
         $this->info("\nSummary: Extracted {$totalRecords} transaction records from " . count($datFiles) . " file(s)");
@@ -89,276 +89,70 @@ class ParseDatFilesCommand extends Command
         return Command::SUCCESS;
     }
 
-/**
- * Parse the content of a DAT file - Fixed for your specific format
- */
-// private function parseFileContent(string $content, string $fileName): Collection
-// {
-//     $results = collect();
-
-//     // Split content into lines and process each line
-//     $lines = explode("\n", $content);
-
-//     $this->info("Debug: Processing {$fileName} with " . count($lines) . " lines");
-
-//     foreach ($lines as $lineNumber => $line) {
-//         $line = trim($line);
-
-//         // Skip empty lines
-//         if (empty($line)) {
-//             continue;
-//         }
-
-//         // Debug: Show first few lines to understand the format
-//         if ($lineNumber < 3) {
-//             $this->line("Debug Line " . ($lineNumber + 1) . ": " . $line);
-//         }
-
-//         $record = $this->extractTransactionData($line, $fileName, $lineNumber);
-
-//         if ($record) {
-//             $results->push($record);
-//             $this->line("Debug: Extracted - Date: {$record['date']}, Amount: {$record['amount']}, Mobile: {$record['mobile_number']}, TransID: {$record['transaction_id']}");
-//         }
-//     }
-
-//     return $results;
-// }
-
-/**
- * Main parsing method that handles multiple transactions per line
- */
-private function parseLineForTransactions(string $line, string $fileName, int $lineNumber): Collection
-{
-    $results = collect();
-
-    // 1. Narrow the string to only the part after AUTH CANCELLED and before BIS XNN
-    if (preg_match('/AUTH CANCELLED(.*?)BIS\s+XNN/', $line, $sectionMatch)) {
-        $transactionSection = $sectionMatch[1];
-
-        // 2. Now extract the relevant transaction data
-        if (preg_match('/(\d{8})(0{10,}\d{3,})(\d{10})\s+(\d{8})(NAM[0-9A-Z]{11})/', $transactionSection, $matches)) {
-            $date = $matches[1];               // e.g. 20250508
-            $amountStr = $matches[2];          // e.g. 0000000000000000180000
-            $mobileStr = $matches[3];          // e.g. 0816260547
-            $transactionId = $matches[5];      // e.g. NAM03DWWTXQB
-
-            // Parse and clean data
-            $parsedDate = $this->parseDate($date);
-            $amount = $this->parseAmountFromPaddedString($amountStr);
-            $mobileNumber = ltrim($mobileStr, '0');
-
-            $results->push([
-                'file' => $fileName,
-                'line' => $lineNumber + 1,
-                'date' => $parsedDate,
-                'amount' => $amount,
-                'mobile_number' => $mobileNumber,
-                'transaction_id' => $transactionId,
-                'raw_line' => $line
-            ]);
-
-            $this->line("✓ Parsed transaction — Date: {$parsedDate}, Amount: {$amount}, Mobile: {$mobileNumber}, TxID: {$transactionId}");
-        } else {
-            $this->warn("⚠ No transaction match in trimmed section on line {$lineNumber}");
-        }
-    } else {
-        $this->warn("⚠ Could not find AUTH CANCELLED → BIS XNN block on line {$lineNumber}");
-    }
-
-    return $results;
-}
-
-
-/**
- * Updated parseFileContent to use the new parsing method
- */
-private function parseFileContentUpdated(string $content, string $fileName): Collection
+    /**
+     * Parse the content of a DAT file
+     */
+private function parseFileContent(string $content, string $fileName): Collection
 {
     $results = collect();
     $lines = explode("\n", $content);
 
-    $this->info("Processing {$fileName} with " . count($lines) . " lines");
-
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
 
-        if (empty($line)) {
+        // Extract content only between AUTH CANCELLED and BIS     XNN
+        $start = strpos($line, 'AUTH CANCELLED');
+        $end = strpos($line, 'BIS     XNN');
+
+        if ($start === false || $end === false || $end <= $start) {
+            $this->warn("Skipping line {$lineNumber}: Missing AUTH CANCELLED or BIS     XNN");
             continue;
         }
 
-        // Debug: Show first few lines
-        if ($lineNumber < 3) {
-            $this->line("Line " . ($lineNumber + 1) . ": " . substr($line, 0, 100) . (strlen($line) > 100 ? '...' : ''));
-        }
+        $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
+        $segment = trim($segment);
 
-        // Parse this line for transactions
-        $lineResults = $this->parseLineForTransactions($line, $fileName, $lineNumber);
-        $results = $results->merge($lineResults);
+        // Match the transaction segment: Date + 20-digit Amount + 10-digit Mobile Number
+        if (preg_match('/(\d{8})(\d{20})(\d{10})/', $segment, $matches)) {
+            $dateRaw = $matches[1];
+            $amountRaw = $matches[2];
+            $mobileRaw = $matches[3];
+
+            // Clean and format amount
+            $cleanAmount = ltrim($amountRaw, '0');
+            $amountInt = $cleanAmount === '' ? 0 : (int) $cleanAmount;
+            $amount = number_format($amountInt / 100, 2, '.', '');
+
+            $mobile = $mobileRaw;
+
+            // Extract transaction ID — look for something like: 20250710NAM0ABCDE1FG
+            $transactionId = '';
+            if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z0-9]{5,20})/', $segment, $transMatch)) {
+                $transactionId = trim($transMatch[1]);
+            } elseif (preg_match('/([A-Z0-9]{10,})/', $segment, $transMatch)) {
+                $transactionId = trim($transMatch[1]);
+            }
+
+            $results->push([
+                'file' => $fileName,
+                'line' => $lineNumber + 1,
+                'date' => $this->parseDate($dateRaw),
+                'amount' => $amount,
+                'mobile_number' => $mobile,
+                'transaction_id' => $transactionId,
+                'raw_line' => $line
+            ]);
+        } else {
+            $this->warn("No match in line {$lineNumber}: {$segment}");
+        }
     }
 
     return $results;
 }
 
 
-/**
- * Extract transaction data from the line based on your specific format
- */
-private function extractTransactionData(string $line, string $fileName, int $lineNumber): ?array
-{
-    $start = strpos($line, 'AUTH CANCELLED');
-    $end = strpos($line, 'BIS     XNN');
-
-    if ($start === false || $end === false || $end <= $start) {
-        return null;
-    }
-
-    $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
-
-    if (preg_match('/(\d{8})(\d{20})(\d{9,10})/', $segment, $matches)) {
-        $dateStr = $matches[1];
-        $amountStr = $matches[2];
-        $mobileStr = $matches[3];
-
-        // Extract transaction ID from segment (same logic)
-        $transactionId = '';
-        if (preg_match('/' . $dateStr . '([A-Z0-9]+)/', $segment, $transMatches)) {
-            $transactionId = $transMatches[1];
-        }
-
-        return [
-            'file' => $fileName,
-            'line' => $lineNumber + 1,
-            'date' => $this->parseDate($dateStr),
-            'amount' => $this->parseAmountFromPaddedString($amountStr),
-            'mobile_number' => ltrim($mobileStr, '0'),
-            'transaction_id' => $transactionId,
-            'raw_line' => $line
-        ];
-    }
-
-    return null;
-}
-
-
-/**
- * Parse amount from the padded 20-digit string
- * Example: 00000000000000039000 should become 39.00
- */
-private function parseAmountFromPaddedString(string $amountStr): string
-{
-    // Remove all leading zeros
-    $amount = ltrim($amountStr, '0');
-
-    if (empty($amount)) {
-        return '0.00';
-    }
-
-    // Convert to integer
-    $amountValue = (int)$amount;
-
-    // The amount appears to be in cents format (3900 = 39.00)
-    // So we need to divide by 100
-    return number_format($amountValue / 100, 2, '.', '');
-}
-
-
-/**
- * Alternative parsing method if the above doesn't work perfectly
- * This looks for multiple patterns in the same line
- */
-private function extractTransactionDataAlternative(string $line, string $fileName, int $lineNumber): ?array
-{
-    $results = [];
-
-    // Extract the segment between AUTH CANCELLED and BIS     XNN
-    $start = strpos($line, 'AUTH CANCELLED');
-    $end = strpos($line, 'BIS     XNN');
-    $segment = '';
-
-    if ($start !== false && $end !== false && $end > $start) {
-        $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
-    } else {
-        return null; // If the expected segment isn't present, skip
-    }
-
-    // Look for all date-amount-mobile patterns in the segment
-    if (preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $segment, $matches, PREG_SET_ORDER)) {
-        foreach ($matches as $match) {
-            $dateStr = $match[1];
-            $amountStr = $match[2];
-            $mobileStr = $match[3];
-
-            // Try to extract a transaction ID in this segment starting with the date
-            $transactionId = '';
-            if (preg_match('/' . preg_quote($dateStr, '/') . '([A-Z0-9]+)/', $segment, $transMatches)) {
-                $transactionId = trim($transMatches[1]);
-            } elseif (preg_match('/([A-Z0-9]{10,})/', $segment, $transMatches)) {
-                $transactionId = trim($transMatches[1]);
-            }
-
-            $results[] = [
-                'file' => $fileName,
-                'line' => $lineNumber + 1,
-                'date' => $this->parseDate($dateStr),
-                'amount' => $this->parseAmountFromPaddedString($amountStr),
-                'mobile_number' => ltrim($mobileStr, '0'),
-                'transaction_id' => $transactionId,
-                'raw_line' => $line
-            ];
-        }
-    }
-
-    return empty($results) ? null : $results[0]; // Return first match for now
-}
-
-
-/**
- * Enhanced parsing that handles your specific example
- */
-private function parseSpecificFormat(string $line): array
-{
-    $transactions = [];
-
-    $start = strpos($line, 'AUTH CANCELLED');
-    $end = strpos($line, 'BIS     XNN');
-
-    if ($start === false || $end === false || $end <= $start) {
-        return [];
-    }
-
-    $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
-
-    preg_match_all('/(\d{8})(\d{20})(\d{9,10})/', $segment, $dataMatches, PREG_SET_ORDER);
-    preg_match_all('/(\d{8})([A-Z0-9]+)/', $segment, $idMatches, PREG_SET_ORDER);
-
-    foreach ($dataMatches as $dataMatch) {
-        $date = $dataMatch[1];
-        $amount = $this->parseAmountFromPaddedString($dataMatch[2]);
-        $mobile = ltrim($dataMatch[3], '0');
-
-        $transactionId = '';
-        foreach ($idMatches as $idMatch) {
-            if ($idMatch[1] === $date) {
-                $transactionId = $idMatch[2];
-                break;
-            }
-        }
-
-        $transactions[] = [
-            'date' => $this->parseDate($date),
-            'amount' => $amount,
-            'mobile_number' => $mobile,
-            'transaction_id' => $transactionId
-        ];
-    }
-
-    return $transactions;
-}
-
-
     /**
-     * Parse date from YYYYMMDD format to YYYY-MM-DD
+     * Parse date from YYYYMMDD to YYYY-MM-DD
      */
     private function parseDate(string $dateStr): string
     {
@@ -367,80 +161,6 @@ private function parseSpecificFormat(string $line): array
         }
         return $dateStr;
     }
-
-    /**
- * Process a regex match and add to results
- */
-private function processMatch(array $matches, string $line, string $fileName, int $lineNumber, Collection $results, string $patternName): void
-{
-    $dateStr = $matches[1];
-    $amountStr = $matches[2];
-    $mobileStr = $matches[3];
-
-    $this->line("Debug: {$patternName} matched - Date: {$dateStr}, Amount: {$amountStr}, Mobile: {$mobileStr}");
-
-    // Only consider the part between AUTH CANCELLED and BIS     XNN
-    $start = strpos($line, 'AUTH CANCELLED');
-    $end = strpos($line, 'BIS     XNN');
-    $segment = '';
-
-    if ($start !== false && $end !== false && $end > $start) {
-        $segment = substr($line, $start + strlen('AUTH CANCELLED'), $end - ($start + strlen('AUTH CANCELLED')));
-    }
-
-    // Extract transaction ID from segment
-    $transactionId = '';
-    if ($segment && preg_match('/' . preg_quote($dateStr, '/') . '([A-Z0-9]+)/', $segment, $transMatches)) {
-        $transactionId = trim($transMatches[1]);
-    } elseif ($segment && preg_match('/([A-Z0-9]{10,})/', $segment, $transMatches)) {
-        $transactionId = trim($transMatches[1]);
-    }
-
-    // Parse date (YYYYMMDD to YYYY-MM-DD)
-    $date = $this->parseDate($dateStr);
-
-    // Parse amount
-    $amount = $this->parseAmount($amountStr);
-
-    // Clean mobile number
-    $mobileNumber = ltrim($mobileStr, '0');
-
-    $results->push([
-        'file' => $fileName,
-        'line' => $lineNumber + 1,
-        'date' => $date,
-        'amount' => $amount,
-        'mobile_number' => $mobileNumber,
-        'transaction_id' => $transactionId,
-        'raw_line' => $line,
-        'pattern_used' => $patternName
-    ]);
-}
-
-
-    /**
- * Enhanced amount parsing with better handling
- */
-private function parseAmount(string $amountStr): string
-{
-    // Remove leading zeros
-    $amount = ltrim($amountStr, '0');
-    if (empty($amount)) {
-        return '0.00';
-    }
-
-    // Handle different amount formats
-    $amountValue = (int)$amount;
-
-    // If the amount seems too large (more than 6 digits), assume last 2 digits are cents
-    if ($amountValue > 999999) {
-        return number_format($amountValue / 100, 2, '.', '');
-    } else {
-        // Otherwise, treat as whole currency units
-        return number_format($amountValue, 2, '.', '');
-    }
-}
-
 
     /**
      * Display results in the specified format
@@ -469,7 +189,7 @@ private function parseAmount(string $amountStr): string
 
             default: // table
                 $headers = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
-                $rows = $results->map(function($record) {
+                $rows = $results->map(function ($record) {
                     return [
                         $record['file'],
                         $record['line'],
@@ -486,113 +206,43 @@ private function parseAmount(string $amountStr): string
     }
 
     /**
-     * Save results to CSV file (always executed)
+     * Save results to a CSV file in storage/app/exports/
      */
-    private function saveToCsv(Collection $results): string
+    private function saveResults(Collection $results): void
     {
-        $timestamp = now()->format('Y-m-d_H-i-s');
-        $fileName = "dat_transactions_{$timestamp}.csv";
-        $filePath = "csv_exports/{$fileName}";
+        $directory = 'exports';
 
-        // Create the directory if it doesn't exist
-        Storage::makeDirectory('csv_exports');
+        if (!Storage::exists($directory)) {
+            Storage::makeDirectory($directory);
+        }
 
-        // Prepare CSV content
-        $csvContent = "File,Line,Date,Amount,Mobile Number,Transaction ID\n";
+        $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
+        $filePath = "{$directory}/{$filename}";
 
+        $csvData = [];
+
+        // Header
+        $csvData[] = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
+
+        // Data rows
         foreach ($results as $record) {
-            $csvContent .= sprintf(
-                "%s,%d,%s,%s,%s,%s\n",
-                $this->escapeCsvField($record['file']),
+            $csvData[] = [
+                $record['file'],
                 $record['line'],
                 $record['date'],
                 $record['amount'],
                 $record['mobile_number'],
-                $this->escapeCsvField($record['transaction_id'])
-            );
+                $record['transaction_id']
+            ];
         }
 
-        Storage::put($filePath, $csvContent);
+        // Convert array to CSV string
+        $csvString = collect($csvData)->map(function ($row) {
+            return implode(',', $row);
+        })->implode("\n");
 
-        return Storage::path($filePath);
+        Storage::put($filePath, $csvString);
+
+        $this->info("✓ Results saved to storage/app/{$filePath}");
     }
-
-    /**
-     * Escape CSV field if it contains commas, quotes, or newlines
-     */
-    private function escapeCsvField(string $field): string
-    {
-        // If field contains comma, quote, or newline, wrap in quotes and escape internal quotes
-        if (strpos($field, ',') !== false || strpos($field, '"') !== false || strpos($field, "\n") !== false) {
-            return '"' . str_replace('"', '""', $field) . '"';
-        }
-        return $field;
-    }
-
-    /**
-     * Save results to a file
-     */
-    private function saveResults(Collection $results, string $format): void
-    {
-        $timestamp = now()->format('Y-m-d_H-i-s');
-        $fileName = "dat_parse_results_{$timestamp}";
-
-        switch ($format) {
-            case 'json':
-                $content = json_encode($results->toArray(), JSON_PRETTY_PRINT);
-                $fileName .= '.json';
-                break;
-
-            case 'csv':
-                $content = "File,Line,Date,Amount,Mobile Number,Transaction ID\n";
-                foreach ($results as $record) {
-                    $content .= sprintf(
-                        "%s,%d,%s,%s,%s,%s\n",
-                        $record['file'],
-                        $record['line'],
-                        $record['date'],
-                        $record['amount'],
-                        $record['mobile_number'],
-                        $record['transaction_id']
-                    );
-                }
-                $fileName .= '.csv';
-                break;
-
-            default:
-                $content = $results->toJson();
-                $fileName .= '.json';
-                break;
-        }
-
-        Storage::put("parsed_results/{$fileName}", $content);
-        $this->info("Results saved to: storage/app/parsed_results/{$fileName}");
-    }
-
-    /**
- * Add a method to show file content sample for debugging
- */
-private function debugFileContent(string $content, string $fileName): void
-{
-    $this->info("=== DEBUG: Content sample from {$fileName} ===");
-
-    // Show file size
-    $this->line("File size: " . strlen($content) . " bytes");
-
-    // Show first 500 characters
-    $sample = substr($content, 0, 500);
-    $this->line("First 500 characters:");
-    $this->line($sample);
-
-    // Show line count and first few lines
-    $lines = explode("\n", $content);
-    $this->line("Total lines: " . count($lines));
-
-    $this->line("First 5 lines:");
-    for ($i = 0; $i < min(5, count($lines)); $i++) {
-        $this->line("Line " . ($i + 1) . ": " . trim($lines[$i]));
-    }
-
-    $this->line("=== END DEBUG ===\n");
-}
 }
