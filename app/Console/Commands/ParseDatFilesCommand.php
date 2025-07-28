@@ -100,11 +100,12 @@ private function parseFileContent(string $content, string $fileName): Collection
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
 
-        // Scope to between AUTH CANCELLED and the timestamp+INTERNET marker
-        if (preg_match('/AUTH CANCELLED\s+(.*?)\s+\d{14}INTERNET/', $line, $segmentMatch)) {
+        // Match everything between "AUTH CANCELLED" and the next 14-digit timestamp + INTERNET
+        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s+\d{14}INTERNET/i', $line, $segmentMatch)) {
             $segment = trim($segmentMatch[1]);
 
-            if (preg_match('/(\d{8})(\d{20})(\d{10})/', $segment, $matches)) {
+            // Match: 8-digit date, 20-digit amount, 10-digit mobile number (may have varying spaces in between)
+            if (preg_match('/(\d{8})\s*(\d{20})\s*(\d{10})/', $segment, $matches)) {
                 $dateRaw = $matches[1];
                 $amountRaw = $matches[2];
                 $mobileRaw = $matches[3];
@@ -112,8 +113,9 @@ private function parseFileContent(string $content, string $fileName): Collection
                 $cleanAmount = ltrim($amountRaw, '0');
                 $amount = number_format(((int)($cleanAmount ?: '0')) / 100, 2, '.', '');
 
+                // Try to extract transaction ID that follows the date
                 $transactionId = '';
-                if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z0-9]{5,})/', $segment, $tm)) {
+                if (preg_match('/' . preg_quote($dateRaw, '/') . '\s*([A-Z0-9]{5,})/', $segment, $tm)) {
                     $transactionId = trim($tm[1]);
                 }
 
@@ -136,6 +138,7 @@ private function parseFileContent(string $content, string $fileName): Collection
 
     return $results;
 }
+
 
 
 
