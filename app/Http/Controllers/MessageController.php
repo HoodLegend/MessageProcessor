@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Services\MessageProcessorService;
 use Carbon\Carbon;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
