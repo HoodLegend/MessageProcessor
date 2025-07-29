@@ -61,23 +61,15 @@
                                         </th>
                                         <th
                                             class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Timestamp
+                                            Transaction Time
                                         </th>
                                         <th
                                             class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Amount
+                                            Transaction Amount
                                         </th>
-                                        <th
+                                                                                <th
                                             class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Reference
-                                        </th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Service
-                                        </th>
-                                        <th
-                                            class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                                            Status
+                                            Phone Number
                                         </th>
                                         <th
                                             class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -86,30 +78,22 @@
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
-                                    <tr v-for="message in data" :key="message.message_id">
+                                    <tr v-for="message in data" :key="message.transaction_id">
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {{ message.message_id.substring(0, 8) }}...
+                                            {{ message.transaction_id }}...
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {{ formatTimestamp(message.timestamp) }}
+                                            {{ formatTimestamp(message.date) }}
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {{ formatAmount(message.amount) }}
                                         </td>
+
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {{ message.reference }}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                            {{ message.message_type }}
-                                        </td>
-                                        <td class="px-6 py-4 whitespace-nowrap">
-                                            <span :class="getStatusClass(message.status)"
-                                                class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full">
-                                                {{ message.status }}
-                                            </span>
+                                            {{ message.mobile_number }}
                                         </td>
                                         <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                                            <Link :href="route('messages.show', message.message_id)"
+                                            <Link :href="route('messages.show', message.transaction_id)"
                                                 class="text-indigo-600 hover:text-indigo-900">
                                             View Details
                                             </Link>
@@ -171,19 +155,10 @@ const formatAmount = (amount) => {
     const numAmount = parseInt(amount) / 100;
     return numAmount.toLocaleString('en-US', {
         style: 'currency',
-        currency: 'ZMW'
+        currency: 'NAM'
     });
 };
 
-const getStatusClass = (status) => {
-    const statusClasses = {
-        'XNN': 'bg-red-100 text-red-800',
-        'OK': 'bg-green-100 text-green-800',
-        'PEN': 'bg-yellow-100 text-yellow-800'
-    };
-
-    return statusClasses[status] || 'bg-gray-100 text-gray-800';
-};
 
 const filterMessages = () => {
     router.get(route('messages.index'), {
