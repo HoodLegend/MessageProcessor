@@ -96,24 +96,30 @@ private function parseFileContent(string $content, string $fileName): Collection
 {
     $results = collect();
     $lines = explode("\n", $content);
+
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
-        // Match everything between "AUTH CANCELLED" and the next 14-digit timestamp + INTERNET
-        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s+\d{14}INTERNET/i', $line, $segmentMatch)) {
+
+        // FIXED: More flexible pattern to handle the actual format
+        // Look for AUTH CANCELLED, capture content, then find INTERNET anywhere after digits
+        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s+\d{12,}INTERNET/i', $line, $segmentMatch)) {
             $segment = trim($segmentMatch[1]);
-            // Match: 8-digit date, 20-digit amount, 10-digit mobile number (may have varying spaces in between)
+
+            // Match: 8-digit date, 20-digit amount, 10-digit mobile number
             if (preg_match('/(\d{8})\s*(\d{20})\s*(\d{10})/', $segment, $matches)) {
                 $dateRaw = $matches[1];
                 $amountRaw = $matches[2];
                 $mobileRaw = $matches[3];
+
                 $cleanAmount = ltrim($amountRaw, '0');
                 $amount = number_format(((int)($cleanAmount ?: '0')) / 100, 2, '.', '');
-                // FIXED: Look for transaction ID in the full line after the segment data
+
+                // Look for transaction ID in the full line
                 $transactionId = '';
-                // Look for the pattern: YYYYMMDD + transaction ID (like NAM0DVPGY9QB) in the full line
-                if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z][A-Z0-9]{4,})\s/', $line, $tm)) {
+                if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z][A-Z0-9]{4,})/', $line, $tm)) {
                     $transactionId = trim($tm[1]);
                 }
+
                 $results->push([
                     'file' => $fileName,
                     'line' => $lineNumber + 1,
@@ -126,10 +132,47 @@ private function parseFileContent(string $content, string $fileName): Collection
             } else {
                 $this->warn("No transaction match in scoped segment on line {$lineNumber}: {$segment}");
             }
-        } else {
-            $this->warn("Skipping line {$lineNumber}: missing AUTH CANCELLED → timestamp+INTERNET segment");
+        }
+        // ALTERNATIVE: Try a different approach if the first pattern fails
+        else if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s*\d{12,}.*INTERNET/i', $line, $segmentMatch)) {
+            $segment = trim($segmentMatch[1]);
+
+            // Match: 8-digit date, 20-digit amount, 10-digit mobile number
+            if (preg_match('/(\d{8})\s*(\d{20})\s*(\d{10})/', $segment, $matches)) {
+                $dateRaw = $matches[1];
+                $amountRaw = $matches[2];
+                $mobileRaw = $matches[3];
+
+                $cleanAmount = ltrim($amountRaw, '0');
+                $amount = number_format(((int)($cleanAmount ?: '0')) / 100, 2, '.', '');
+
+                // Look for transaction ID in the full line
+                $transactionId = '';
+                if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z][A-Z0-9]{4,})/', $line, $tm)) {
+                    $transactionId = trim($tm[1]);
+                }
+
+                $results->push([
+                    'file' => $fileName,
+                    'line' => $lineNumber + 1,
+                    'date' => $this->parseDate($dateRaw),
+                    'amount' => $amount,
+                    'mobile_number' => $mobileRaw,
+                    'transaction_id' => $transactionId,
+                    'raw_line' => $line
+                ]);
+            } else {
+                $this->warn("No transaction match in scoped segment on line {$lineNumber}: {$segment}");
+            }
+        }
+        else {
+            // Only show warning for lines that contain AUTH CANCELLED (to reduce noise)
+            if (stripos($line, 'AUTH CANCELLED') !== false) {
+                $this->warn("Skipping line " . ($lineNumber + 1) . ": missing AUTH CANCELLED → timestamp+INTERNET segment");
+            }
         }
     }
+
     return $results;
 }
 
