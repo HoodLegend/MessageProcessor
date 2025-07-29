@@ -71,10 +71,10 @@
                                             class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Phone Number
                                         </th>
-                                        <th
+                                        <!-- <th
                                             class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                             Actions
-                                        </th>
+                                        </th> -->
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
@@ -92,12 +92,12 @@
                                         <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                             {{ message.mobile_number }}
                                         </td>
-                                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                        <!-- <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                             <Link :href="route('messages.show', message.transaction_id)"
                                                 class="text-indigo-600 hover:text-indigo-900">
                                             View Details
                                             </Link>
-                                        </td>
+                                        </td> -->
                                     </tr>
                                 </tbody>
                             </table>
