@@ -96,77 +96,40 @@ private function parseFileContent(string $content, string $fileName): Collection
 {
     $results = collect();
     $lines = explode("\n", $content);
-
-    $this->info("Debug: Processing {$fileName} with " . count($lines) . " lines");
-
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
-
-        // Skip empty lines
-        if (empty($line)) {
-            continue;
-        }
-
-        // Debug: Show each line to understand the format
-        $this->line("Debug Line " . ($lineNumber + 1) . ": " . $line);
-
-        // Check if line contains the required keywords
-        $hasAuthCancelled = stripos($line, 'AUTH CANCELLED') !== false;
-        $hasInternet = stripos($line, 'INTERNET') !== false;
-
-        $this->line("  - Contains 'AUTH CANCELLED': " . ($hasAuthCancelled ? 'YES' : 'NO'));
-        $this->line("  - Contains 'INTERNET': " . ($hasInternet ? 'YES' : 'NO'));
-
-        if (!$hasAuthCancelled || !$hasInternet) {
-            $this->warn("  - Skipping: missing required keywords");
-            continue;
-        }
-
-        // Try multiple regex patterns to handle different spacing
-        $patterns = [
-            // Pattern 1: Original pattern
-            '/AUTH\s+CANCELLED\s+(.*?)\s+\d{14}INTERNET/i',
-
-            // Pattern 2: More flexible spacing
-            '/AUTH\s*CANCELLED\s*(.*?)\s*\d{14}\s*INTERNET/i',
-
-            // Pattern 3: Handle multiple spaces
-            '/AUTH\s+CANCELLED\s+(.*?)\d{14}INTERNET/i',
-
-            // Pattern 4: Very flexible
-            '/AUTH.*?CANCELLED\s+(.*?)\s*\d{14}.*?INTERNET/i',
-
-            // Pattern 5: Case insensitive with flexible spacing
-            '/AUTH\s+CANCELLED\s+(.*?)\s*\d{14}.*INTERNET/is',
-        ];
-
-        $matchFound = false;
-
-        foreach ($patterns as $index => $pattern) {
-            if (preg_match($pattern, $line, $segmentMatch)) {
-                $this->line("  - Pattern " . ($index + 1) . " matched!");
-                $segment = trim($segmentMatch[1]);
-                $this->line("  - Extracted segment: '{$segment}'");
-
-                $record = $this->parseSegment($segment, $fileName, $lineNumber, $line);
-                if ($record) {
-                    $results->push($record);
-                    $matchFound = true;
-                    break;
+        // Match everything between "AUTH CANCELLED" and the next 14-digit timestamp + INTERNET
+        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s+\d{14}INTERNET/i', $line, $segmentMatch)) {
+            $segment = trim($segmentMatch[1]);
+            // Match: 8-digit date, 20-digit amount, 10-digit mobile number (may have varying spaces in between)
+            if (preg_match('/(\d{8})\s*(\d{20})\s*(\d{10})/', $segment, $matches)) {
+                $dateRaw = $matches[1];
+                $amountRaw = $matches[2];
+                $mobileRaw = $matches[3];
+                $cleanAmount = ltrim($amountRaw, '0');
+                $amount = number_format(((int)($cleanAmount ?: '0')) / 100, 2, '.', '');
+                // FIXED: Look for transaction ID in the full line after the segment data
+                $transactionId = '';
+                // Look for the pattern: YYYYMMDD + transaction ID (like NAM0DVPGY9QB) in the full line
+                if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z][A-Z0-9]{4,})\s/', $line, $tm)) {
+                    $transactionId = trim($tm[1]);
                 }
+                $results->push([
+                    'file' => $fileName,
+                    'line' => $lineNumber + 1,
+                    'date' => $this->parseDate($dateRaw),
+                    'amount' => $amount,
+                    'mobile_number' => $mobileRaw,
+                    'transaction_id' => $transactionId,
+                    'raw_line' => $line
+                ]);
             } else {
-                $this->line("  - Pattern " . ($index + 1) . " did not match");
+                $this->warn("No transaction match in scoped segment on line {$lineNumber}: {$segment}");
             }
-        }
-
-        if (!$matchFound) {
-            $this->warn("  - No patterns matched for line " . ($lineNumber + 1));
-
-            // Try to extract manually by finding positions
-            $this->tryManualExtraction($line, $lineNumber);
+        } else {
+            $this->warn("Skipping line {$lineNumber}: missing AUTH CANCELLED → timestamp+INTERNET segment");
         }
     }
-
     return $results;
 }
 
