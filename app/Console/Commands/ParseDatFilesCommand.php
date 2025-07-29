@@ -374,6 +374,10 @@ private function tryManualExtraction(string $line, int $lineNumber): void
         $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
         $filePath = "{$directory}/{$filename}";
 
+        if (Storage::exists($filePath)) {
+        Storage::delete($filePath); // Option 1 applied here
+    }
+
         $csvData = [];
 
         // Header
