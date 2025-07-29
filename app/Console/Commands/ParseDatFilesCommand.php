@@ -97,78 +97,85 @@ private function parseFileContent(string $content, string $fileName): Collection
     $results = collect();
     $lines = explode("\n", $content);
 
-    $this->info("Debug: Processing {$fileName} with " . count($lines) . " lines");
-
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
 
-        // Skip empty lines
         if (empty($line)) {
             continue;
         }
 
-        // Debug: Show each line to understand the format
-        $this->line("Debug Line " . ($lineNumber + 1) . ": " . $line);
-
-        // Check if line contains the required keywords
-        $hasAuthCancelled = stripos($line, 'AUTH CANCELLED') !== false;
-        $hasInternet = stripos($line, 'INTERNET') !== false;
-
-        $this->line("  - Contains 'AUTH CANCELLED': " . ($hasAuthCancelled ? 'YES' : 'NO'));
-        $this->line("  - Contains 'INTERNET': " . ($hasInternet ? 'YES' : 'NO'));
-
-        if (!$hasAuthCancelled || !$hasInternet) {
-            $this->warn("  - Skipping: missing required keywords");
+        // Check if line contains both required markers
+        if (stripos($line, 'AUTH CANCELLED') === false || stripos($line, 'INTERNET') === false) {
             continue;
         }
 
-        // Try multiple regex patterns to handle different spacing
-        $patterns = [
-            // Pattern 1: Original pattern
-            '/AUTH\s+CANCELLED\s+(.*?)\s+\d{14}INTERNET/i',
+        // More flexible pattern - capture everything between AUTH CANCELLED and any 14-digit number followed by INTERNET
+        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s*(\d{14}).*?INTERNET/i', $line, $segmentMatch)) {
+            $segment = trim($segmentMatch[1]);
+            $timestamp = $segmentMatch[2];
 
-            // Pattern 2: More flexible spacing
-            '/AUTH\s*CANCELLED\s*(.*?)\s*\d{14}\s*INTERNET/i',
+            // Look for date-amount-mobile pattern in the segment
+            if (preg_match('/(\d{8})\s*(\d{20})\s*(\d{10})/', $segment, $matches)) {
+                $dateRaw = $matches[1];
+                $amountRaw = $matches[2];
+                $mobileRaw = $matches[3];
 
-            // Pattern 3: Handle multiple spaces
-            '/AUTH\s+CANCELLED\s+(.*?)\d{14}INTERNET/i',
+                $cleanAmount = ltrim($amountRaw, '0');
+                $amount = number_format(((int)($cleanAmount ?: '0')) / 100, 2, '.', '');
 
-            // Pattern 4: Very flexible
-            '/AUTH.*?CANCELLED\s+(.*?)\s*\d{14}.*?INTERNET/i',
+                // FIXED: Extract transaction ID from the full line, not just the segment
+                $transactionId = $this->extractTransactionIdFromFullLine($line, $dateRaw);
 
-            // Pattern 5: Case insensitive with flexible spacing
-            '/AUTH\s+CANCELLED\s+(.*?)\s*\d{14}.*INTERNET/is',
-        ];
-
-        $matchFound = false;
-
-        foreach ($patterns as $index => $pattern) {
-            if (preg_match($pattern, $line, $segmentMatch)) {
-                $this->line("  - Pattern " . ($index + 1) . " matched!");
-                $segment = trim($segmentMatch[1]);
-                $this->line("  - Extracted segment: '{$segment}'");
-
-                $record = $this->parseSegment($segment, $fileName, $lineNumber, $line);
-                if ($record) {
-                    $results->push($record);
-                    $matchFound = true;
-                    break;
-                }
-            } else {
-                $this->line("  - Pattern " . ($index + 1) . " did not match");
+                $results->push([
+                    'file' => $fileName,
+                    'line' => $lineNumber + 1,
+                    'date' => $this->parseDate($dateRaw),
+                    'amount' => $amount,
+                    'mobile_number' => $mobileRaw,
+                    'transaction_id' => $transactionId,
+                    'raw_line' => $line
+                ]);
             }
-        }
-
-        if (!$matchFound) {
-            $this->warn("  - No patterns matched for line " . ($lineNumber + 1));
-
-            // Try to extract manually by finding positions
-            $this->tryManualExtraction($line, $lineNumber);
         }
     }
 
     return $results;
 }
+
+/**
+ * Extract transaction ID from the full line using the date pattern
+ */
+private function extractTransactionIdFromFullLine(string $fullLine, string $dateRaw): string
+{
+    // Look for pattern: YYYYMMDD followed by alphanumeric transaction ID
+    // Example: 20250710NAM0DVPGY9QB
+    if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z0-9]{5,})\s/', $fullLine, $matches)) {
+        return trim($matches[1]);
+    }
+
+    // If the above doesn't work, try without requiring a space after
+    if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z0-9]{5,})/', $fullLine, $matches)) {
+        $candidate = trim($matches[1]);
+
+        // Make sure it's not just more digits (like timestamp)
+        if (!ctype_digit($candidate)) {
+            return $candidate;
+        }
+    }
+
+    // Alternative: Look for NAM pattern specifically
+    if (preg_match('/NAM[A-Z0-9]{7,}/', $fullLine, $matches)) {
+        return trim($matches[0]);
+    }
+
+    // Fallback: Look for any alphanumeric pattern that follows the date
+    if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z][A-Z0-9]{4,})/', $fullLine, $matches)) {
+        return trim($matches[1]);
+    }
+
+    return '';
+}
+
 
 private function parseSegment(string $segment, string $fileName, int $lineNumber, string $fullLine): ?array
 {
