@@ -190,7 +190,7 @@ class MessageController extends Controller
     /**
      * Get all CSV files in the exports directory
      */
-    private function getCsvFiles(): Collection
+    private function getCsvFiles()
     {
         $files = Storage::files('csv_exports');
 
@@ -250,7 +250,7 @@ class MessageController extends Controller
     /**
      * Filter transactions based on search term
      */
-    private function filterTransactions(Collection $transactions, string $search): Collection
+    private function filterTransactions(Collection $transactions, string $search)
     {
         return $transactions->filter(function ($transaction) use ($search) {
             return stripos($transaction['mobile_number'], $search) !== false ||
@@ -263,7 +263,7 @@ class MessageController extends Controller
     /**
      * Filter transactions by date range
      */
-    private function filterByDateRange(Collection $transactions, ?string $dateFrom, ?string $dateTo): Collection
+    private function filterByDateRange(Collection $transactions, ?string $dateFrom, ?string $dateTo)
     {
         return $transactions->filter(function ($transaction) use ($dateFrom, $dateTo) {
             $transactionDate = $transaction['date'];
