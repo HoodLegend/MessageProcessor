@@ -101,7 +101,8 @@ private function parseFileContent(string $content, string $fileName): Collection
         $line = trim($line);
 
         // Match everything between "AUTH CANCELLED" and the next 14-digit timestamp + INTERNET
-        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\s+\d{14}INTERNET/i', $line, $segmentMatch)) {
+         if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\d{14}INTERNET/i', $line, $segmentMatch))
+{
             $segment = trim($segmentMatch[1]);
 
             // FIXED: Made mobile number pattern more flexible (9-12 digits instead of exactly 10)
