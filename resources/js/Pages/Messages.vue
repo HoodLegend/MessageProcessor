@@ -21,9 +21,9 @@
             </div>
 
             <!-- Info Bar -->
-            <div v-if="fileName" class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4">
+            <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4">
                 <div class="flex flex-wrap items-center gap-4 text-sm">
-                    <span><strong>File:</strong> {{ fileName }}</span>
+                    <span><strong>File:</strong> {{ fileName || 'Latest transactions' }}</span>
                     <span><strong>Records:</strong> {{ totalRecords }}</span>
                     <span><strong>Last Updated:</strong> {{ lastUpdated }}</span>
                 </div>
@@ -44,6 +44,8 @@
                         <th>Date</th>
                         <th>Amount</th>
                         <th>Phone Number</th>
+                        <th>Source File</th>
+                        <th>Line</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -52,7 +54,6 @@
             </table>
         </div>
     </div>
-
     </AuthenticatedLayout>
 </template>
 
@@ -64,14 +65,27 @@ import $ from 'jquery'
 import 'datatables.net'
 import 'datatables.net-dt/css/dataTables.dataTables.css'
 
+
 export default {
-    name: 'TransactionDataTable',
-    setup() {
+    name: 'Messages',
+    props: {
+        data: {
+            type: Array,
+            default: () => []
+        },
+        fileName: {
+            type: String,
+            default: ''
+        },
+        totalRecords: {
+            type: Number,
+            default: 0
+        }
+    },
+    setup(props) {
         const loading = ref(false)
         const error = ref(null)
-        const fileName = ref('')
-        const totalRecords = ref(0)
-        const lastUpdated = ref('')
+        const lastUpdated = ref(new Date().toLocaleString())
         let dataTable = null
 
         const initializeDataTable = () => {
@@ -80,7 +94,7 @@ export default {
             }
 
             dataTable = $('#transactionsTable').DataTable({
-                data: [],
+                data: props.data || [],
                 columns: [
                     {
                         data: 'transaction_id',
@@ -111,12 +125,24 @@ export default {
                             return formatPhoneNumber(data)
                         }
                     },
+                    {
+                        data: 'file',
+                        title: 'Source File',
+                        render: function(data) {
+                            return getFileName(data)
+                        }
+                    },
+                    {
+                        data: 'line',
+                        title: 'Line #',
+                        className: 'text-center'
+                    }
                 ],
                 pageLength: 25,
                 lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
                 order: [[1, 'desc']], // Sort by date descending
                 responsive: true,
-                processing: true,
+                processing: false, // No need for processing indicator with Inertia
                 language: {
                     emptyTable: "No transaction data available",
                     info: "Showing _START_ to _END_ of _TOTAL_ transactions",
@@ -133,36 +159,27 @@ export default {
                     $('.dataTables_filter input').addClass('form-input rounded border-gray-300')
                 }
             })
-        }
 
-        const loadData = async () => {
-            loading.value = true
-            error.value = null
-
-            try {
-                const response = await axios.get('/messages')
-                const data = response.data;
-
-                console.log(data);
-                fileName.value = response.data.file_name
-                totalRecords.value = response.data.total_records
-                lastUpdated.value = new Date().toLocaleString()
-
-                // Update DataTable with new data
-                if (dataTable) {
-                    dataTable.clear().rows.add(data).draw()
-                }
-
-            } catch (err) {
-                error.value = err.response?.data?.error || 'Failed to load transaction data'
-                console.error('Error loading CSV data:', err)
-            } finally {
-                loading.value = false
-            }
+            console.log('DataTable initialized with', props.data?.length || 0, 'records')
         }
 
         const refreshData = () => {
-            loadData()
+            loading.value = true
+            error.value = null
+
+            // Use Inertia to reload the page with fresh data
+            router.reload({
+                onSuccess: () => {
+                    loading.value = false
+                    lastUpdated.value = new Date().toLocaleString()
+                    console.log('Data refreshed via Inertia')
+                },
+                onError: (errors) => {
+                    loading.value = false
+                    error.value = 'Failed to refresh data'
+                    console.error('Inertia reload error:', errors)
+                }
+            })
         }
 
         const formatDate = (dateString) => {
@@ -187,7 +204,7 @@ export default {
 
             return new Intl.NumberFormat('en-US', {
                 style: 'currency',
-                currency: 'NAM'
+                currency: 'USD'
             }).format(numAmount)
         }
 
@@ -201,31 +218,21 @@ export default {
             return filePath.split('/').pop() || filePath
         }
 
-        // Auto-refresh functionality
-        let refreshInterval = null
-        const startAutoRefresh = () => {
-            refreshInterval = setInterval(() => {
-                if (!loading.value) {
-                    loadData()
-                }
-            }, 60000) // Refresh every minute
-        }
-
-        const stopAutoRefresh = () => {
-            if (refreshInterval) {
-                clearInterval(refreshInterval)
-                refreshInterval = null
+        // Watch for changes in props.data (when Inertia updates the data)
+        watch(() => props.data, (newData) => {
+            console.log('Data prop changed, updating DataTable with', newData?.length || 0, 'records')
+            if (dataTable) {
+                dataTable.clear().rows.add(newData || []).draw()
+                lastUpdated.value = new Date().toLocaleString()
             }
-        }
+        }, { deep: true })
 
-        onMounted(async () => {
+        onMounted(() => {
+            console.log('Component mounted with data:', props.data?.length || 0, 'records')
             initializeDataTable()
-            await loadData()
-            startAutoRefresh()
         })
 
         onUnmounted(() => {
-            stopAutoRefresh()
             if (dataTable) {
                 dataTable.destroy()
             }
@@ -234,10 +241,11 @@ export default {
         return {
             loading,
             error,
-            fileName,
-            totalRecords,
             lastUpdated,
-            refreshData
+            refreshData,
+            // Expose props as computed values for template
+            fileName: props.fileName,
+            totalRecords: props.totalRecords || props.data?.length || 0
         }
     }
 }

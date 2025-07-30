@@ -219,56 +219,59 @@ class MessageController extends Controller
 public function getCsvData(Request $request)
 {
     try {
-        // Get the latest CSV file or specific file
-        $directory = 'exports';
-        $files = Storage::files($directory);
+            $directory = 'exports';
+            $files = Storage::files($directory);
 
-        // Filter for CSV files and get the latest one
-        $csvFiles = array_filter($files, function($file) {
-            return pathinfo($file, PATHINFO_EXTENSION) === 'csv';
-        });
+            $csvFiles = array_filter($files, function($file) {
+                return pathinfo($file, PATHINFO_EXTENSION) === 'csv';
+            });
 
-        if (empty($csvFiles)) {
-            return response()->json(['error' => 'No CSV files found'], 404);
-        }
+            $data = [];
+            $fileName = '';
 
-        // Sort by modification time and get the latest
-        usort($csvFiles, function($a, $b) {
-            return Storage::lastModified($b) - Storage::lastModified($a);
-        });
+            if (!empty($csvFiles)) {
+                // Get the latest file
+                usort($csvFiles, function($a, $b) {
+                    return Storage::lastModified($b) - Storage::lastModified($a);
+                });
 
-        $latestFile = $csvFiles[0];
-        $csvContent = Storage::get($latestFile);
+                $latestFile = $csvFiles[0];
+                $fileName = basename($latestFile);
+                $csvContent = Storage::get($latestFile);
 
-        // Parse CSV
-        $lines = explode("\n", trim($csvContent));
-        $header = str_getcsv(array_shift($lines)); // Remove and get header
+                $lines = explode("\n", trim($csvContent));
+                $header = str_getcsv(array_shift($lines));
 
-        $data = [];
-        foreach ($lines as $line) {
-            if (trim($line)) {
-                $row = str_getcsv($line);
-                $data[] = [
-                    'file' => $row[0] ?? '',
-                    'line' => $row[1] ?? '',
-                    'date' => $row[2] ?? '',
-                    'amount' => $row[3] ?? '',
-                    'mobile_number' => $row[4] ?? '',
-                    'transaction_id' => $row[5] ?? '',
-                ];
+                foreach ($lines as $line) {
+                    if (trim($line)) {
+                        $row = str_getcsv($line);
+                        $data[] = [
+                            'file' => $row[0] ?? '',
+                            'line' => $row[1] ?? '',
+                            'date' => $row[2] ?? '',
+                            'amount' => $row[3] ?? '',
+                            'mobile_number' => $row[4] ?? '',
+                            'transaction_id' => $row[5] ?? '',
+                        ];
+                    }
+                }
             }
+
+            return Inertia::render('Messages', [
+                'data' => $data,
+                'fileName' => $fileName,
+                'totalRecords' => count($data),
+            ]);
+
+        } catch (\Exception $e) {
+            return Inertia::render('Messages', [
+                'data' => [],
+                'fileName' => '',
+                'totalRecords' => 0,
+                'error' => $e->getMessage(),
+            ]);
         }
-
-        return Inertia::render("Messages", [
-            'data' => $data,
-            'file_name' => basename($latestFile),
-            'total_records' => count($data)
-        ]);
-
-    } catch (\Exception $e) {
-        return response()->json(['error' => $e->getMessage()], 500);
     }
-}
 
     /**
      * Parse a CSV file and return collection of transactions
