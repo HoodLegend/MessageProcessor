@@ -259,7 +259,7 @@ public function getCsvData(Request $request)
             }
         }
 
-        return Inertia::render("Messages", [
+        return response()->json([
             'data' => $data,
             'file_name' => basename($latestFile),
             'total_records' => count($data)
