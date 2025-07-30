@@ -44,8 +44,6 @@
                         <th>Date</th>
                         <th>Amount</th>
                         <th>Phone Number</th>
-                        <th>Source File</th>
-                        <th>Line</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -113,18 +111,6 @@ export default {
                             return formatPhoneNumber(data)
                         }
                     },
-                    {
-                        data: 'file',
-                        title: 'Source File',
-                        render: function(data) {
-                            return getFileName(data)
-                        }
-                    },
-                    {
-                        data: 'line',
-                        title: 'Line #',
-                        className: 'text-center'
-                    }
                 ],
                 pageLength: 25,
                 lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
@@ -157,6 +143,7 @@ export default {
                 const response = await axios.get('/messages')
                 const data = response.data;
 
+                console.log(data);
                 fileName.value = response.data.file_name
                 totalRecords.value = response.data.total_records
                 lastUpdated.value = new Date().toLocaleString()
