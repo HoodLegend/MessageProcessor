@@ -44,8 +44,6 @@
                         <th>Date</th>
                         <th>Amount</th>
                         <th>Phone Number</th>
-                        <th>Source File</th>
-                        <th>Line</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -59,11 +57,11 @@
 
 <script>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
-import { ref, onMounted, onUnmounted } from 'vue'
-import axios from 'axios'
-import $ from 'jquery'
-import 'datatables.net'
-import 'datatables.net-dt/css/dataTables.dataTables.css'
+import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { router } from '@inertiajs/vue3';
+import $ from 'jquery';
+import 'datatables.net';
+import 'datatables.net-dt/css/dataTables.dataTables.css';
 
 
 export default {
@@ -125,18 +123,6 @@ export default {
                             return formatPhoneNumber(data)
                         }
                     },
-                    {
-                        data: 'file',
-                        title: 'Source File',
-                        render: function(data) {
-                            return getFileName(data)
-                        }
-                    },
-                    {
-                        data: 'line',
-                        title: 'Line #',
-                        className: 'text-center'
-                    }
                 ],
                 pageLength: 25,
                 lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
