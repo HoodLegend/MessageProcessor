@@ -2,63 +2,72 @@
     <AuthenticatedLayout>
 
         <Head title="Messages" />
-    <div>
-        <!-- Header Section -->
-        <div class="mb-6">
-            <div class="flex justify-between items-center mb-4">
-                <h2 class="text-2xl font-bold text-gray-900">Transaction Data</h2>
-                <button
-                    @click="refreshData"
-                    :disabled="loading"
-                    class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-                >
-                    <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    {{ loading ? 'Loading...' : 'Refresh Data' }}
-                </button>
-            </div>
+        <div>
+            <!-- Header Section -->
+            <div class="mb-6">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-gray-900">Transaction Data</h2>
+                    <button @click="refreshData" :disabled="loading"
+                        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                        <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                            </circle>
+                            <path class="opacity-75" fill="currentColor"
+                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                            </path>
+                        </svg>
+                        {{ loading ? 'Loading...' : 'Refresh Data' }}
+                    </button>
+                </div>
 
-            <!-- Info Bar -->
-            <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4">
-                <div class="flex flex-wrap items-center gap-4 text-sm">
-                    <span><strong>File:</strong> {{ fileName || 'Latest transactions' }}</span>
-                    <span><strong>Records:</strong> {{ totalRecords }}</span>
-                    <span><strong>Last Updated:</strong> {{ lastUpdated }}</span>
+                <!-- Info Bar -->
+                <div class="bg-blue-50 border border-blue-200 text-blue-700 px-4 py-3 rounded mb-4">
+                    <div class="flex flex-wrap items-center gap-4 text-sm">
+                        <span><strong>File:</strong> {{ fileName || 'Latest transactions' }}</span>
+                        <span><strong>Records:</strong> {{ totalRecords }}</span>
+                        <span><strong>Last Updated:</strong> {{ lastUpdated }}</span>
+                    </div>
+                </div>
+
+                <!-- Error Display -->
+                <div v-if="error" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
+                    <p>{{ error }}</p>
                 </div>
             </div>
 
-            <!-- Error Display -->
-            <div v-if="error" class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded mb-4">
-                <p>{{ error }}</p>
-            </div>
-        </div>
+            <!-- DataTable Container -->
+            <div class="py-8 px-4 sm:px-6 lg:px-8">
+                <div class="max-w-7xl mx-auto">
+                    <div class="bg-white shadow-lg rounded-lg overflow-hidden p-6">
+                        <div class="overflow-x-auto">
+                            <table id="transactionsTable" class="stripe hover w-full text-sm text-left"
+                                style="width:100%">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="px-4 py-2 font-semibold text-gray-700">Transaction ID</th>
+                                        <th class="px-4 py-2 font-semibold text-gray-700">Date</th>
+                                        <th class="px-4 py-2 font-semibold text-gray-700">Amount</th>
+                                        <th class="px-4 py-2 font-semibold text-gray-700">Phone Number</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <!-- DataTables will populate this -->
+                                </tbody>
+                            </table>
+                        </div>
 
-        <!-- DataTable Container -->
-        <div class="bg-white shadow-lg rounded-lg overflow-hidden">
-            <table id="transactionsTable" class="display" style="width:100%">
-                <thead>
-                    <tr>
-                        <th>Transaction ID</th>
-                        <th>Date</th>
-                        <th>Amount</th>
-                        <th>Phone Number</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <!-- DataTables will populate this -->
-                </tbody>
-            </table>
+                    </div>
+                </div>
+            </div>
+
         </div>
-    </div>
     </AuthenticatedLayout>
 </template>
 
 <script>
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 import { ref, onMounted, onUnmounted, watch } from 'vue';
-import { router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import $ from 'jquery';
 import 'datatables.net';
 import 'datatables.net-dt/css/dataTables.dataTables.css';
@@ -97,21 +106,21 @@ export default {
                     {
                         data: 'transaction_id',
                         title: 'Transaction ID',
-                        render: function(data) {
+                        render: function (data) {
                             return data || 'N/A'
                         }
                     },
                     {
                         data: 'date',
                         title: 'Date',
-                        render: function(data) {
+                        render: function (data) {
                             return formatDate(data)
                         }
                     },
                     {
                         data: 'amount',
                         title: 'Amount',
-                        render: function(data) {
+                        render: function (data) {
                             return formatAmount(data)
                         },
                         className: 'text-right'
@@ -119,7 +128,7 @@ export default {
                     {
                         data: 'mobile_number',
                         title: 'Phone Number',
-                        render: function(data) {
+                        render: function (data) {
                             return formatPhoneNumber(data)
                         }
                     },
@@ -139,7 +148,7 @@ export default {
                     zeroRecords: "No matching transactions found"
                 },
                 dom: '<"flex justify-between items-center mb-4"<"flex items-center gap-2"l><"flex items-center gap-2"f>>rtip',
-                initComplete: function() {
+                initComplete: function () {
                     // Custom styling after table initialization
                     $('.dataTables_length select').addClass('form-select rounded border-gray-300')
                     $('.dataTables_filter input').addClass('form-input rounded border-gray-300')
