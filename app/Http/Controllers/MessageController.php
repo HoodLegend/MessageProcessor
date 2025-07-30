@@ -220,7 +220,7 @@ public function getCsvData(Request $request)
 {
     try {
         // Get the latest CSV file or specific file
-        $directory = 'exports';
+        $directory = 'app/private/exports';
         $files = Storage::files($directory);
 
         // Filter for CSV files and get the latest one
