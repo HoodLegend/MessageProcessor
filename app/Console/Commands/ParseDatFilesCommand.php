@@ -363,45 +363,93 @@ private function tryManualExtraction(string $line, int $lineNumber): void
     /**
      * Save results to a CSV file in storage/app/exports/
      */
-    private function saveResults(Collection $results): void
-    {
-        $directory = 'exports';
+private function saveResults(Collection $results): void
+{
+    // Debug info
+    $this->info("=== DEBUG INFO ===");
+    $this->info("Current time: " . now()->format('Y-m-d H:i:s'));
+    $this->info("Results count: " . $results->count());
+    $this->info("Storage path: " . storage_path('app'));
+    $this->info("Default disk: " . config('filesystems.default'));
 
-        if (!Storage::exists($directory)) {
-            Storage::makeDirectory($directory);
-        }
+    $directory = 'exports';
+    $this->info("Checking directory: {$directory}");
 
-        $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
-        $filePath = "{$directory}/{$filename}";
+    // Check and create directory
+    if (!Storage::exists($directory)) {
+        $this->info("Directory doesn't exist, creating...");
+        $created = Storage::makeDirectory($directory);
+        $this->info("Directory creation: " . ($created ? 'SUCCESS' : 'FAILED'));
+    } else {
+        $this->info("Directory already exists");
+    }
 
+    // Generate filename
+    $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
+    $filePath = "{$directory}/{$filename}";
+    $this->info("Target file path: {$filePath}");
+    $this->info("Full system path: " . storage_path("app/{$filePath}"));
+
+    // Check if results is empty
+    if ($results->isEmpty()) {
+        $this->error("Results collection is empty - no data to save!");
+        return;
+    }
+
+    $csvData = [];
+    // Header
+    $csvData[] = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
+
+    // Data rows
+    foreach ($results as $record) {
+        $csvData[] = [
+            $record['file'] ?? 'N/A',
+            $record['line'] ?? 'N/A',
+            $record['date'] ?? 'N/A',
+            $record['amount'] ?? 'N/A',
+            $record['mobile_number'] ?? 'N/A',
+            $record['transaction_id'] ?? 'N/A'
+        ];
+    }
+
+    $this->info("CSV rows prepared: " . count($csvData));
+
+    // Convert array to CSV string
+    $csvString = collect($csvData)->map(function ($row) {
+        return implode(',', $row);
+    })->implode("\n");
+
+    $this->info("CSV string length: " . strlen($csvString) . " characters");
+
+    // Try to save
+    try {
+        $saved = Storage::put($filePath, $csvString);
+        $this->info("Storage::put result: " . ($saved ? 'TRUE' : 'FALSE'));
+
+        // Verify file exists
         if (Storage::exists($filePath)) {
-        Storage::delete($filePath); // Option 1 applied here
-    }
-
-        $csvData = [];
-
-        // Header
-        $csvData[] = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
-
-        // Data rows
-        foreach ($results as $record) {
-            $csvData[] = [
-                $record['file'],
-                $record['line'],
-                $record['date'],
-                $record['amount'],
-                $record['mobile_number'],
-                $record['transaction_id']
-            ];
+            $size = Storage::size($filePath);
+            $this->info("✓ File created successfully!");
+            $this->info("✓ File size: {$size} bytes");
+            $this->info("✓ Full path: " . storage_path("app/{$filePath}"));
+        } else {
+            $this->error("✗ File was not created (Storage::exists returned false)");
         }
 
-        // Convert array to CSV string
-        $csvString = collect($csvData)->map(function ($row) {
-            return implode(',', $row);
-        })->implode("\n");
-
-        Storage::put($filePath, $csvString);
-
-        $this->info("✓ Results saved to storage/app/{$filePath}");
+    } catch (\Exception $e) {
+        $this->error("Exception during file save: " . $e->getMessage());
+        $this->error("Exception trace: " . $e->getTraceAsString());
     }
+
+    // Also check the directory contents
+    try {
+        $files = Storage::files($directory);
+        $this->info("Files in {$directory}: " . count($files));
+        foreach ($files as $file) {
+            $this->info("  - {$file}");
+        }
+    } catch (\Exception $e) {
+        $this->error("Could not list directory contents: " . $e->getMessage());
+    }
+}
 }
