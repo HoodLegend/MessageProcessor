@@ -190,7 +190,7 @@ export default {
 
             return new Intl.NumberFormat('en-US', {
                 style: 'currency',
-                currency: 'USD'
+                currency: 'NAD'
             }).format(numAmount)
         }
 
