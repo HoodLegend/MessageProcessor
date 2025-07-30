@@ -20,7 +20,7 @@ Schedule::command('device:whitelist {ip}')
     ->everyMinute()
     ->withoutOverlapping();
 
-Schedule::command('files:move-dat')
+Schedule::command('files:move-dat --copy')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
@@ -34,7 +34,7 @@ Schedule::command('files:move-dat')
 
 
 
-Schedule::command('files:parse-dat')
+Schedule::command('files:parse-dat --output=csv --save')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
@@ -46,16 +46,6 @@ Schedule::command('files:parse-dat')
         \Log::error('Scheduled message processing failed');
     });
 
-Schedule::command('redis:dat-manager get')
-    ->everyMinute()
-    ->withoutOverlapping()
-    ->runInBackground()
-    ->onSuccess(function () {
-        \Log::info('Scheduled message processing completed successfully');
-    })
-    ->onFailure(function () {
-        \Log::error('Scheduled message processing failed');
-    });
 
 // Send data to server every 5 minutes (offset by 2 minutes to ensure data is processed first)
 Schedule::command('data:send-to-server')
@@ -74,20 +64,3 @@ Schedule::command('data:send-to-server')
     ->onFailure(function () {
         \Log::error('Data transmission failed');
     });
-
-
-
-
-// Run download script every minute
-// Schedule::command('bank:download-files')
-//          ->everyMinute()
-//          ->withoutOverlapping()
-//          ->runInBackground()
-//          ->appendOutputTo(storage_path('logs/downloaded_messages.log'));
-
-// Decode messages every 2 minutes (offset to avoid conflicts)
-// Schedule::command('bank:decode-messages')
-//          ->everyTwoMinutes()
-//          ->withoutOverlapping()
-//          ->runInBackground()
-//          ->appendOutputTo(storage_path('logs/decoded_messages.log'));

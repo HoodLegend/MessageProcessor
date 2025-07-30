@@ -190,29 +190,85 @@ class MessageController extends Controller
     /**
      * Get all CSV files in the exports directory
      */
-    private function getCsvFiles()
-    {
-        $files = Storage::files('csv_exports');
+    // private function getCsvFiles()
+    // {
+    //     $files = Storage::files('csv_exports');
 
-        return collect($files)
-            ->filter(function ($file) {
-                return pathinfo($file, PATHINFO_EXTENSION) === 'csv';
-            })
-            ->map(function ($file) {
-                $fileName = basename($file);
-                $filePath = Storage::path($file);
+    //     return collect($files)
+    //         ->filter(function ($file) {
+    //             return pathinfo($file, PATHINFO_EXTENSION) === 'csv';
+    //         })
+    //         ->map(function ($file) {
+    //             $fileName = basename($file);
+    //             $filePath = Storage::path($file);
 
-                return [
-                    'name' => $fileName,
-                    'size' => Storage::size($file),
-                    'last_modified' => Storage::lastModified($file),
-                    'formatted_size' => $this->formatBytes(Storage::size($file)),
-                    'formatted_date' => Carbon::createFromTimestamp(Storage::lastModified($file))->format('Y-m-d H:i:s')
+    //             return [
+    //                 'name' => $fileName,
+    //                 'size' => Storage::size($file),
+    //                 'last_modified' => Storage::lastModified($file),
+    //                 'formatted_size' => $this->formatBytes(Storage::size($file)),
+    //                 'formatted_date' => Carbon::createFromTimestamp(Storage::lastModified($file))->format('Y-m-d H:i:s')
+    //             ];
+    //         })
+    //         ->sortByDesc('last_modified')
+    //         ->values();
+    // }
+
+
+
+public function getCsvData(Request $request)
+{
+    try {
+        // Get the latest CSV file or specific file
+        $directory = 'exports';
+        $files = Storage::files($directory);
+
+        // Filter for CSV files and get the latest one
+        $csvFiles = array_filter($files, function($file) {
+            return pathinfo($file, PATHINFO_EXTENSION) === 'csv';
+        });
+
+        if (empty($csvFiles)) {
+            return response()->json(['error' => 'No CSV files found'], 404);
+        }
+
+        // Sort by modification time and get the latest
+        usort($csvFiles, function($a, $b) {
+            return Storage::lastModified($b) - Storage::lastModified($a);
+        });
+
+        $latestFile = $csvFiles[0];
+        $csvContent = Storage::get($latestFile);
+
+        // Parse CSV
+        $lines = explode("\n", trim($csvContent));
+        $header = str_getcsv(array_shift($lines)); // Remove and get header
+
+        $data = [];
+        foreach ($lines as $line) {
+            if (trim($line)) {
+                $row = str_getcsv($line);
+                $data[] = [
+                    'file' => $row[0] ?? '',
+                    'line' => $row[1] ?? '',
+                    'date' => $row[2] ?? '',
+                    'amount' => $row[3] ?? '',
+                    'mobile_number' => $row[4] ?? '',
+                    'transaction_id' => $row[5] ?? '',
                 ];
-            })
-            ->sortByDesc('last_modified')
-            ->values();
+            }
+        }
+
+        return response()->json([
+            'data' => $data,
+            'file_name' => basename($latestFile),
+            'total_records' => count($data)
+        ]);
+
+    } catch (\Exception $e) {
+        return response()->json(['error' => $e->getMessage()], 500);
     }
+}
 
     /**
      * Parse a CSV file and return collection of transactions

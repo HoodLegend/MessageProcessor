@@ -22,6 +22,10 @@
     },
     "dependencies": {
         "@inertiajs/vue3": "^2.0.11",
-        "chart.js": "^4.4.9"
+        "chart.js": "^4.4.9",
+        "datatables.net": "^2.3.2",
+        "datatables.net-dt": "^2.3.2",
+        "datatables.net-vue3": "^3.0.4",
+        "jquery": "^3.7.1"
     }
 }
