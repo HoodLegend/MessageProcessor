@@ -155,7 +155,7 @@ export default {
 
             try {
                 const response = await axios.get('/messages')
-                const data = response.data.data
+                const data = response.data;
 
                 fileName.value = response.data.file_name
                 totalRecords.value = response.data.total_records
