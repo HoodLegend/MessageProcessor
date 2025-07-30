@@ -154,7 +154,7 @@ export default {
             error.value = null
 
             try {
-                const response = await axios.get('/transactions/csv-data')
+                const response = await axios.get('/messages')
                 const data = response.data.data
 
                 fileName.value = response.data.file_name
@@ -200,7 +200,7 @@ export default {
 
             return new Intl.NumberFormat('en-US', {
                 style: 'currency',
-                currency: 'USD'
+                currency: 'NAM'
             }).format(numAmount)
         }
 
