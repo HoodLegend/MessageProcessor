@@ -24,7 +24,7 @@ Schedule::command('files:move-dat --copy')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
-    ->appendOutputTo("logs/data_from_DATfile_logs")
+    ->appendOutputTo(storage_path("logs/data_from_DATfile_logs"))
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
     })
@@ -38,7 +38,7 @@ Schedule::command('files:parse-dat --output=csv --save')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
-    ->appendOutputTo("logs/parsed_data_from_DatFile_logs")
+    ->appendOutputTo(storage_path("logs/parsed_data_from_DatFile_logs"))
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
     })
@@ -48,19 +48,19 @@ Schedule::command('files:parse-dat --output=csv --save')
 
 
 // Send data to server every 5 minutes (offset by 2 minutes to ensure data is processed first)
-Schedule::command('data:send-to-server')
-    ->everyFiveMinutes()
-    ->skip(function () {
-        // Skip if no data in Redis
-        $redis = \Illuminate\Support\Facades\Redis::connection();
-        return !$redis->exists('transaction-records') &&
-            !$redis->exists('local-file-data');
-    })
-    ->withoutOverlapping()
-    ->runInBackground()
-    ->onSuccess(function () {
-        \Log::info('Data transmission completed successfully');
-    })
-    ->onFailure(function () {
-        \Log::error('Data transmission failed');
-    });
+// Schedule::command('data:send-to-server')
+//     ->everyFiveMinutes()
+//     ->skip(function () {
+//         // Skip if no data in Redis
+//         $redis = \Illuminate\Support\Facades\Redis::connection();
+//         return !$redis->exists('transaction-records') &&
+//             !$redis->exists('local-file-data');
+//     })
+//     ->withoutOverlapping()
+//     ->runInBackground()
+//     ->onSuccess(function () {
+//         \Log::info('Data transmission completed successfully');
+//     })
+//     ->onFailure(function () {
+//         \Log::error('Data transmission failed');
+//     });
