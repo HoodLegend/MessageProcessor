@@ -373,7 +373,8 @@ private function tryManualExtraction(string $line, int $lineNumber): void
 
         $dataDate = $this->extractDateFromResults($results);
 
-        $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
+        // $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
+         $filename = 'transactions_' . $dataDate . '_' . now()->format('His') . '.csv';
         $filePath = "{$directory}/{$filename}";
 
         $csvData = [];
