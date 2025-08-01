@@ -12,7 +12,7 @@ use Inertia\Inertia;
 
 class MessageController extends Controller
 {
-   /**
+    /**
      * Display a list of all CSV files and their data
      */
     public function index(Request $request)
@@ -41,7 +41,7 @@ class MessageController extends Controller
             }
 
             // Calculate stats
-            $totalAmount = $transactions->sum(function($transaction) {
+            $totalAmount = $transactions->sum(function ($transaction) {
                 return (float) $transaction['amount'];
             });
 
@@ -164,7 +164,8 @@ class MessageController extends Controller
             'data' => $transactions->values(),
             'meta' => [
                 'total' => $transactions->count(),
-                'total_amount' => $transactions->sum(function($t) { return (float) $t['amount']; }),
+                'total_amount' => $transactions->sum(function ($t) {
+                    return (float) $t['amount']; }),
                 'file' => $selectedFile
             ]
         ]);
@@ -216,13 +217,13 @@ class MessageController extends Controller
 
 
 
-public function getCsvData(Request $request)
-{
-    try {
+    public function getCsvData(Request $request)
+    {
+        try {
             $directory = 'exports';
             $files = Storage::files($directory);
 
-            $csvFiles = array_filter($files, function($file) {
+            $csvFiles = array_filter($files, function ($file) {
                 return pathinfo($file, PATHINFO_EXTENSION) === 'csv';
             });
 
@@ -231,7 +232,7 @@ public function getCsvData(Request $request)
 
             if (!empty($csvFiles)) {
                 // Get the latest file
-                usort($csvFiles, function($a, $b) {
+                usort($csvFiles, function ($a, $b) {
                     return Storage::lastModified($b) - Storage::lastModified($a);
                 });
 
@@ -261,6 +262,7 @@ public function getCsvData(Request $request)
                 'data' => $data,
                 'fileName' => $fileName,
                 'totalRecords' => count($data),
+                'currentFilePath' => $latestFile ?? null,
             ]);
 
         } catch (\Exception $e) {
@@ -273,6 +275,22 @@ public function getCsvData(Request $request)
         }
     }
 
+    public function downloadCsv($filename)
+    {
+        $filePath = 'exports/' . $filename;
+
+        if (!Storage::exists($filePath)) {
+            abort(404, 'File not found');
+        }
+
+        // Security check - only allow CSV files from exports directory
+        if (pathinfo($filename, PATHINFO_EXTENSION) !== 'csv') {
+            abort(403, 'Invalid file type');
+        }
+
+        return Storage::download($filePath, $filename);
+    }
+
     /**
      * Parse a CSV file and return collection of transactions
      */
@@ -282,7 +300,7 @@ public function getCsvData(Request $request)
         $lines = explode("\n", $content);
 
         // Remove header line and empty lines
-        $dataLines = array_filter(array_slice($lines, 1), function($line) {
+        $dataLines = array_filter(array_slice($lines, 1), function ($line) {
             return !empty(trim($line));
         });
 
@@ -313,9 +331,9 @@ public function getCsvData(Request $request)
     {
         return $transactions->filter(function ($transaction) use ($search) {
             return stripos($transaction['mobile_number'], $search) !== false ||
-                   stripos($transaction['transaction_id'], $search) !== false ||
-                   stripos($transaction['amount'], $search) !== false ||
-                   stripos($transaction['date'], $search) !== false;
+                stripos($transaction['transaction_id'], $search) !== false ||
+                stripos($transaction['amount'], $search) !== false ||
+                stripos($transaction['date'], $search) !== false;
         });
     }
 

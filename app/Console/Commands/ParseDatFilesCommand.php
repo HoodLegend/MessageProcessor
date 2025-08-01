@@ -371,6 +371,8 @@ private function tryManualExtraction(string $line, int $lineNumber): void
             Storage::makeDirectory($directory);
         }
 
+        $dataDate = $this->extractDateFromResults($results);
+
         $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
         $filePath = "{$directory}/{$filename}";
 
@@ -400,4 +402,31 @@ private function tryManualExtraction(string $line, int $lineNumber): void
 
         $this->info("✓ Results saved to storage/app/{$filePath}");
     }
+
+    private function extractDateFromResults(Collection $results): string
+{
+    if ($results->isEmpty()) {
+        return now()->format('Ymd');
+    }
+
+    // Count occurrences of each date
+    $dateCounts = $results->groupBy('date')->map->count();
+
+    // Get the most frequent date
+    $mostCommonDate = $dateCounts->keys()->sortByDesc(function($date) use ($dateCounts) {
+        return $dateCounts[$date];
+    })->first();
+
+    if (!$mostCommonDate) {
+        return now()->format('Ymd');
+    }
+
+    try {
+        $date = \Carbon\Carbon::parse($mostCommonDate);
+        return $date->format('Ymd');
+    } catch (\Exception $e) {
+        $this->warn("Could not parse date '{$mostCommonDate}', using current date");
+        return now()->format('Ymd');
+    }
+}
 }
