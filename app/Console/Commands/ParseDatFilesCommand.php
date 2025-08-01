@@ -121,19 +121,16 @@ private function parseFileContent(string $content, string $fileName): Collection
                 }
 
                 $results->push([
-                    'file' => $fileName,
-                    'line' => $lineNumber + 1,
                     'date' => $this->parseDate($dateRaw),
                     'amount' => $amount,
                     'mobile_number' => $mobileRaw,
-                    'transaction_id' => $transactionId,
-                    'raw_line' => $line
+                    'transaction_id' => $transactionId
                 ]);
             } else {
                 // Enhanced debug to show why it's not matching
                 $this->warn("No transaction match in scoped segment on line " . ($lineNumber + 1) . ": {$segment}");
 
-                // Try to extract parts individually for debugging
+                // Try to extract parts individually segment by segment for debugging
                 if (preg_match('/(\d{8})/', $segment, $dateMatch)) {
                     $this->line("  Found date: " . $dateMatch[1]);
                 }
@@ -172,13 +169,10 @@ private function parseFileContent(string $content, string $fileName): Collection
                     $this->info("  Alternative parsing successful!");
 
                     $results->push([
-                        'file' => $fileName,
-                        'line' => $lineNumber + 1,
                         'date' => $this->parseDate($dateRaw),
                         'amount' => $amount,
                         'mobile_number' => $mobileRaw,
                         'transaction_id' => $transactionId,
-                        'raw_line' => $line
                     ]);
                 }
             }
@@ -225,13 +219,10 @@ private function parseSegment(string $segment, string $fileName, int $lineNumber
             $transactionId = $this->extractTransactionId($segment, $dateRaw);
 
             return [
-                'file' => $fileName,
-                'line' => $lineNumber + 1,
                 'date' => $this->parseDate($dateRaw),
                 'amount' => $amount,
                 'mobile_number' => $mobileRaw,
                 'transaction_id' => $transactionId,
-                'raw_line' => $fullLine
             ];
         } else {
             $this->line("  - Segment pattern " . ($index + 1) . " did not match");
@@ -328,12 +319,10 @@ private function tryManualExtraction(string $line, int $lineNumber): void
                 break;
 
             case 'csv':
-                $this->line('File,Line,Date,Amount,Mobile Number,Transaction ID');
+                $this->line('Date,Amount,Mobile Number,Transaction ID');
                 foreach ($results as $record) {
                     $this->line(sprintf(
                         '%s,%d,%s,%s,%s,%s',
-                        $record['file'],
-                        $record['line'],
                         $record['date'],
                         $record['amount'],
                         $record['mobile_number'],
@@ -343,13 +332,11 @@ private function tryManualExtraction(string $line, int $lineNumber): void
                 break;
 
             default: // table
-                $headers = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
+                $headers = ['Date', 'Amount', 'Mobile Number', 'Transaction ID'];
                 $rows = $results->map(function ($record) {
                     return [
-                        $record['file'],
-                        $record['line'],
                         $record['date'],
-                        '$' . $record['amount'],
+                        $record['amount'],
                         $record['mobile_number'],
                         $record['transaction_id']
                     ];
@@ -374,19 +361,17 @@ private function tryManualExtraction(string $line, int $lineNumber): void
         $dataDate = $this->extractDateFromResults($results);
 
         // $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
-         $filename = 'transactions_' . $dataDate . '_' . now()->format('His') . '.csv';
+         $filename = 'transactions_' . $dataDate . '_' . '.csv';
         $filePath = "{$directory}/{$filename}";
 
         $csvData = [];
 
         // Header
-        $csvData[] = ['File', 'Line', 'Date', 'Amount', 'Mobile Number', 'Transaction ID'];
+        $csvData[] = ['Date', 'Amount', 'Mobile Number', 'Transaction ID'];
 
         // Data rows
         foreach ($results as $record) {
             $csvData[] = [
-                $record['file'],
-                $record['line'],
                 $record['date'],
                 $record['amount'],
                 $record['mobile_number'],
