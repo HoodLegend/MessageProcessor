@@ -124,13 +124,13 @@ private function parseFileContent(string $content, string $fileName): Collection
                     'date' => $this->parseDate($dateRaw),
                     'amount' => $amount,
                     'mobile_number' => $mobileRaw,
-                    'transaction_id' => $transactionId
+                    'transaction_id' => $transactionId,
                 ]);
             } else {
                 // Enhanced debug to show why it's not matching
                 $this->warn("No transaction match in scoped segment on line " . ($lineNumber + 1) . ": {$segment}");
 
-                // Try to extract parts individually segment by segment for debugging
+                // Try to extract parts individually for debugging
                 if (preg_match('/(\d{8})/', $segment, $dateMatch)) {
                     $this->line("  Found date: " . $dateMatch[1]);
                 }
@@ -322,7 +322,7 @@ private function tryManualExtraction(string $line, int $lineNumber): void
                 $this->line('Date,Amount,Mobile Number,Transaction ID');
                 foreach ($results as $record) {
                     $this->line(sprintf(
-                        '%s,%d,%s,%s,%s,%s',
+                        '%s,%d,%s,%s',
                         $record['date'],
                         $record['amount'],
                         $record['mobile_number'],
