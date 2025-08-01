@@ -188,34 +188,6 @@ class MessageController extends Controller
             ->with('message', "File '{$fileName}' has been deleted successfully.");
     }
 
-    /**
-     * Get all CSV files in the exports directory
-     */
-    // private function getCsvFiles()
-    // {
-    //     $files = Storage::files('csv_exports');
-
-    //     return collect($files)
-    //         ->filter(function ($file) {
-    //             return pathinfo($file, PATHINFO_EXTENSION) === 'csv';
-    //         })
-    //         ->map(function ($file) {
-    //             $fileName = basename($file);
-    //             $filePath = Storage::path($file);
-
-    //             return [
-    //                 'name' => $fileName,
-    //                 'size' => Storage::size($file),
-    //                 'last_modified' => Storage::lastModified($file),
-    //                 'formatted_size' => $this->formatBytes(Storage::size($file)),
-    //                 'formatted_date' => Carbon::createFromTimestamp(Storage::lastModified($file))->format('Y-m-d H:i:s')
-    //             ];
-    //         })
-    //         ->sortByDesc('last_modified')
-    //         ->values();
-    // }
-
-
 
     public function getCsvData(Request $request)
     {
@@ -247,8 +219,6 @@ class MessageController extends Controller
                     if (trim($line)) {
                         $row = str_getcsv($line);
                         $data[] = [
-                            'file' => $row[0] ?? '',
-                            'line' => $row[1] ?? '',
                             'date' => $row[2] ?? '',
                             'amount' => $row[3] ?? '',
                             'mobile_number' => $row[4] ?? '',
@@ -311,8 +281,6 @@ class MessageController extends Controller
 
             if (count($fields) >= 6) {
                 $transactions->push([
-                    'file' => $fields[0],
-                    'line' => (int) $fields[1],
                     'date' => $fields[2],
                     'amount' => $fields[3],
                     'mobile_number' => $fields[4],
