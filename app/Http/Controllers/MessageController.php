@@ -189,6 +189,7 @@ class MessageController extends Controller
     }
 
 
+
     public function getCsvData(Request $request)
     {
         try {
@@ -219,10 +220,10 @@ class MessageController extends Controller
                     if (trim($line)) {
                         $row = str_getcsv($line);
                         $data[] = [
-                            'date' => $row[2] ?? '',
-                            'amount' => $row[3] ?? '',
-                            'mobile_number' => $row[4] ?? '',
-                            'transaction_id' => $row[5] ?? '',
+                            'date' => $row[0] ?? '',
+                            'amount' => $row[1] ?? '',
+                            'mobile_number' => $row[2] ?? '',
+                            'transaction_id' => $row[3] ?? '',
                         ];
                     }
                 }
@@ -281,10 +282,10 @@ class MessageController extends Controller
 
             if (count($fields) >= 6) {
                 $transactions->push([
-                    'date' => $fields[2],
-                    'amount' => $fields[3],
-                    'mobile_number' => $fields[4],
-                    'transaction_id' => $fields[5]
+                    'date' => $fields[0],
+                    'amount' => $fields[1],
+                    'mobile_number' => $fields[2],
+                    'transaction_id' => $fields[3]
                 ]);
             }
         }
