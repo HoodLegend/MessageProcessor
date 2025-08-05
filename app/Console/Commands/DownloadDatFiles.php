@@ -13,7 +13,7 @@ class DownloadDatFiles extends Command
      *
      * @var string
      */
-    protected $signature = 'files:move-dat {--copy : Copy files instead of moving them}';
+    protected $signature = 'files:move-dat {--copy : Copy files instead of moving them} {--batch-size=100 : Number of files to process per batch}';
 
     /**
      * The console command description.
