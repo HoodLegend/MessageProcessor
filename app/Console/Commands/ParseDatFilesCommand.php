@@ -356,24 +356,28 @@ private function tryManualExtraction(string $line, int $lineNumber): void
                 break;
 
             case 'csv':
-                $this->line('Date,Amount,Mobile Number,Transaction ID');
+                $this->line('Date,Amount,Timestamp Date, Time, Mobile Number,Transaction ID');
                 foreach ($results as $record) {
                     $this->line(sprintf(
-                        '%s,%d,%s,%s',
+                        '%s,%d,%s,%s,%d,%d',
                         $record['date'],
                         $record['amount'],
                         $record['mobile_number'],
+                        $record['timestamp_date'],
+                        $record['time'],
                         $record['transaction_id']
                     ));
                 }
                 break;
 
             default: // table
-                $headers = ['Date', 'Amount', 'Mobile Number', 'Transaction ID'];
+                $headers = ['Date','Timestamp Date', 'Time', 'Amount', 'Mobile Number', 'Transaction ID'];
                 $rows = $results->map(function ($record) {
                     return [
                         $record['date'],
                         $record['amount'],
+                        $record['timestamp_date'],
+                        $record['time'],
                         $record['mobile_number'],
                         $record['transaction_id']
                     ];
