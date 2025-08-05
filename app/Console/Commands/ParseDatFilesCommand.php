@@ -138,11 +138,8 @@ private function parseFileContent(string $content, string $fileName): Collection
                 }
 
                 $results->push([
-                    'file' => $fileName,
-                    'line' => $lineNumber + 1,
-                    'date' => $this->parseDate($dateRaw),
-                    'timestamp_date' => $this->parseDate($dateFromTimestamp),
-                    'time' => $this->formatTime($timeFromTimestamp),
+                    'transaction_date' => $this->parseDate($dateRaw),
+                    'transaction_time' => $this->formatTime($timeFromTimestamp),
                     'amount' => $amount,
                     'mobile_number' => $mobileRaw,
                     'transaction_id' => $transactionId,
@@ -190,11 +187,8 @@ private function parseFileContent(string $content, string $fileName): Collection
                     $this->info("  Alternative parsing successful!");
 
                     $results->push([
-                        'file' => $fileName,
-                        'line' => $lineNumber + 1,
-                        'date' => $this->parseDate($dateRaw),
-                        'timestamp_date' => $this->parseDate($dateFromTimestamp),
-                        'time' => $this->formatTime($timeFromTimestamp),
+                        'transaction_date' => $this->parseDate($dateRaw),
+                        'transaction_time' => $this->formatTime($timeFromTimestamp),
                         'amount' => $amount,
                         'mobile_number' => $mobileRaw,
                         'transaction_id' => $transactionId,
@@ -256,7 +250,7 @@ private function parseSegment(string $segment, string $fileName, int $lineNumber
             $transactionId = $this->extractTransactionId($segment, $dateRaw);
 
             return [
-                'date' => $this->parseDate($dateRaw),
+                'transaction_date' => $this->parseDate($dateRaw),
                 'amount' => $amount,
                 'mobile_number' => $mobileRaw,
                 'transaction_id' => $transactionId,
