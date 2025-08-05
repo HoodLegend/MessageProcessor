@@ -100,10 +100,27 @@ private function parseFileContent(string $content, string $fileName): Collection
     foreach ($lines as $lineNumber => $line) {
         $line = trim($line);
 
-        // Match everything between "AUTH CANCELLED" and the next 14-digit timestamp + INTERNET
-         if (preg_match('/AUTH\s+CANCELLED\s+(.*?)\d{14}INTERNET/i', $line, $segmentMatch))
-{
+        // Skip empty lines
+        if (empty($line)) {
+            continue;
+        }
+
+        // Check if line contains CPY (new requirement)
+        if (!str_contains($line, 'CPY')) {
+            $this->info("Skipping line " . ($lineNumber + 1) . ": no CPY found");
+            continue;
+        }
+
+        // Match everything between "AUTH CANCELLED" and the next timestamp pattern (YYYYMMDDHHMMSSSINTERNET)
+        if (preg_match('/AUTH\s+CANCELLED\s+(.*?)(\d{4}\d{2}\d{2}\d{2}\d{2}\d{2}\d{2})INTERNET/i', $line, $segmentMatch)) {
             $segment = trim($segmentMatch[1]);
+            $fullTimestamp = $segmentMatch[2]; // This captures YYYYMMDDHHMMSSS (14 digits)
+
+            // Extract date (YYYYMMDD) and time (HHMMSSS) from the full timestamp
+            $dateFromTimestamp = substr($fullTimestamp, 0, 8); // YYYYMMDD
+            $timeFromTimestamp = substr($fullTimestamp, 8, 6); // HHMMSSS (taking first 6 digits for HHMMSS)
+
+            $this->info("Found timestamp: {$fullTimestamp}, Date: {$dateFromTimestamp}, Time: {$timeFromTimestamp}");
 
             // FIXED: Made mobile number pattern more flexible (9-12 digits instead of exactly 10)
             if (preg_match('/(\d{8})\s*(\d{20})\s*(\d{9,12})/', $segment, $matches)) {
@@ -121,7 +138,11 @@ private function parseFileContent(string $content, string $fileName): Collection
                 }
 
                 $results->push([
+                    'file' => $fileName,
+                    'line' => $lineNumber + 1,
                     'date' => $this->parseDate($dateRaw),
+                    'timestamp_date' => $this->parseDate($dateFromTimestamp),
+                    'time' => $this->formatTime($timeFromTimestamp),
                     'amount' => $amount,
                     'mobile_number' => $mobileRaw,
                     'transaction_id' => $transactionId,
@@ -169,7 +190,11 @@ private function parseFileContent(string $content, string $fileName): Collection
                     $this->info("  Alternative parsing successful!");
 
                     $results->push([
+                        'file' => $fileName,
+                        'line' => $lineNumber + 1,
                         'date' => $this->parseDate($dateRaw),
+                        'timestamp_date' => $this->parseDate($dateFromTimestamp),
+                        'time' => $this->formatTime($timeFromTimestamp),
                         'amount' => $amount,
                         'mobile_number' => $mobileRaw,
                         'transaction_id' => $transactionId,
@@ -182,6 +207,18 @@ private function parseFileContent(string $content, string $fileName): Collection
     }
 
     return $results;
+}
+
+// Helper method to format time from HHMMSSS to HH:MM:SS
+private function formatTime(string $timeString): string
+{
+    if (strlen($timeString) >= 6) {
+        $hours = substr($timeString, 0, 2);
+        $minutes = substr($timeString, 2, 2);
+        $seconds = substr($timeString, 4, 2);
+        return "{$hours}:{$minutes}:{$seconds}";
+    }
+    return $timeString; // Return as-is if format is unexpected
 }
 
 private function parseSegment(string $segment, string $fileName, int $lineNumber, string $fullLine): ?array
@@ -367,12 +404,14 @@ private function tryManualExtraction(string $line, int $lineNumber): void
         $csvData = [];
 
         // Header
-        $csvData[] = ['Date', 'Amount', 'Mobile Number', 'Transaction ID'];
+        $csvData[] = ['Date','Timestamp Date', 'Time','Amount', 'Mobile Number', 'Transaction ID'];
 
         // Data rows
         foreach ($results as $record) {
             $csvData[] = [
                 $record['date'],
+                $record['timestamp_date'] ?? 'N/A',
+                $record['time'] ?? 'N/A',
                 $record['amount'],
                 $record['mobile_number'],
                 $record['transaction_id']
