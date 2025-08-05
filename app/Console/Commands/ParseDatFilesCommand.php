@@ -345,48 +345,45 @@ private function tryManualExtraction(string $line, int $lineNumber): void
         return $dateStr;
     }
 
-    /**
+/**
      * Display results in the specified format
      */
-    private function displayResults(Collection $results, string $format): void
-    {
-        switch ($format) {
-            case 'json':
-                $this->line(json_encode($results->toArray(), JSON_PRETTY_PRINT));
-                break;
-
-            case 'csv':
-                $this->line('Date,Amount,Timestamp Date, Time, Mobile Number,Transaction ID');
-                foreach ($results as $record) {
-                    $this->line(sprintf(
-                        '%s,%d,%s,%s,%d,%d',
-                        $record['date'],
-                        $record['amount'],
-                        $record['mobile_number'],
-                        $record['timestamp_date'],
-                        $record['time'],
-                        $record['transaction_id']
-                    ));
-                }
-                break;
-
-            default: // table
-                $headers = ['Date','Timestamp Date', 'Time', 'Amount', 'Mobile Number', 'Transaction ID'];
-                $rows = $results->map(function ($record) {
-                    return [
-                        $record['date'],
-                        $record['amount'],
-                        $record['timestamp_date'],
-                        $record['time'],
-                        $record['mobile_number'],
-                        $record['transaction_id']
-                    ];
-                })->toArray();
-
-                $this->table($headers, $rows);
-                break;
-        }
+private function displayResults(Collection $results, string $format): void
+{
+    switch ($format) {
+        case 'json':
+            $this->line(json_encode($results->toArray(), JSON_PRETTY_PRINT));
+            break;
+        case 'csv':
+            // Updated CSV headers to include new fields
+            $this->line('Transaction Date,Transaction Time,Amount,Mobile Number,Transaction ID');
+            foreach ($results as $record) {
+                $this->line(sprintf(
+                    '%d,%s,%s,%s,%s',
+                    $record['transaction_date'] ?? 'N/A',
+                    $record['transaction_time'] ?? 'N/A',
+                    $record['amount'] ?? 'N/A',
+                    $record['mobile_number'] ?? 'N/A',
+                    $record['transaction_id'] ?? 'N/A'
+                ));
+            }
+            break;
+        default: // table
+            // Updated table headers to include new fields
+            $headers = ['Transaction Date','Time', 'Amount', 'Mobile Number', 'Transaction ID'];
+            $rows = $results->map(function ($record) {
+                return [
+                    $record['transaction_date'] ?? 'N/A',
+                    $record['transaction_time'] ?? 'N/A',
+                    $record['amount'] ?? 'N/A',
+                    $record['mobile_number'] ?? 'N/A',
+                    $record['transaction_id'] ?? 'N/A'
+                ];
+            })->toArray();
+            $this->table($headers, $rows);
+            break;
     }
+}
 
     /**
      * Save results to a CSV file in storage/app/exports/
@@ -402,20 +399,19 @@ private function tryManualExtraction(string $line, int $lineNumber): void
         $dataDate = $this->extractDateFromResults($results);
 
         // $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
-         $filename = $dataDate . '.csv';
+             $filename = $dataDate . '.csv';
         $filePath = "{$directory}/{$filename}";
 
         $csvData = [];
 
         // Header
-        $csvData[] = ['Date','Timestamp Date', 'Time','Amount', 'Mobile Number', 'Transaction ID'];
+        $csvData[] = ['Transaction Date','Transaction Time','Amount', 'Mobile Number', 'Transaction ID'];
 
         // Data rows
         foreach ($results as $record) {
             $csvData[] = [
-                $record['date'],
-                $record['timestamp_date'] ?? 'N/A',
-                $record['time'] ?? 'N/A',
+                $record['transaction_date'],
+                $record['transaction_time'] ?? 'N/A',
                 $record['amount'],
                 $record['mobile_number'],
                 $record['transaction_id']
@@ -439,7 +435,7 @@ private function tryManualExtraction(string $line, int $lineNumber): void
     }
 
     // Count occurrences of each date
-    $dateCounts = $results->groupBy('date')->map->count();
+    $dateCounts = $results->groupBy('transaction_date')->map->count();
 
     // Get the most frequent date
     $mostCommonDate = $dateCounts->keys()->sortByDesc(function($date) use ($dateCounts) {
