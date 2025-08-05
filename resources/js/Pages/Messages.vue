@@ -54,7 +54,8 @@
                             <thead class="bg-gray-100">
                                 <tr>
                                     <th class="px-4 py-2 font-semibold text-gray-700">Transaction ID</th>
-                                    <th class="px-4 py-2 font-semibold text-gray-700">Date</th>
+                                    <th class="px-4 py-2 font-semibold text-gray-700">Transaction Time</th>
+                                    <th class="px-4 py-2 font-semibold text-gray-700">Transaction Date</th>
                                     <th class="px-4 py-2 font-semibold text-gray-700">Amount</th>
                                     <th class="px-4 py-2 font-semibold text-gray-700">Phone Number</th>
                                 </tr>
@@ -126,10 +127,17 @@ export default {
                         }
                     },
                     {
-                        data: 'date',
-                        title: 'Date',
+                        data: 'transaction_date',
+                        title: 'Transaction Date',
                         render: function (data) {
                             return formatDate(data)
+                        }
+                    },
+                    {
+                        data: 'transaction_time',
+                        title: 'Transaction Time',
+                        render: function (data) {
+                            return formatTime(data)
                         }
                     },
                     {
@@ -173,17 +181,17 @@ export default {
             console.log('DataTable initialized with', props.data?.length || 0, 'records')
         }
 
-            const downloadCurrentFile = () => {
-        if (props.currentFilePath) {
-            const filename = props.currentFilePath.split('/').pop()
-            const link = document.createElement('a')
-            link.href = `/transactions/download/${encodeURIComponent(filename)}`
-            link.download = filename
-            document.body.appendChild(link)
-            link.click()
-            document.body.removeChild(link)
+        const downloadCurrentFile = () => {
+            if (props.currentFilePath) {
+                const filename = props.currentFilePath.split('/').pop()
+                const link = document.createElement('a')
+                link.href = `/transactions/download/${encodeURIComponent(filename)}`
+                link.download = filename
+                document.body.appendChild(link)
+                link.click()
+                document.body.removeChild(link)
+            }
         }
-    }
 
         const refreshData = () => {
             loading.value = true
@@ -204,6 +212,7 @@ export default {
             })
         }
 
+        // format the data correctly
         const formatDate = (dateString) => {
             if (!dateString) return 'N/A'
             try {
@@ -218,6 +227,7 @@ export default {
             }
         }
 
+        // correctly formats the amount of money that has been transacted.
         const formatAmount = (amount) => {
             if (!amount) return 'N/A'
             const cleanAmount = amount.toString().replace(/\*/g, '')
@@ -230,15 +240,54 @@ export default {
             }).format(numAmount)
         }
 
+        // formats the phone Number correctly.
         const formatPhoneNumber = (phone) => {
             if (!phone) return 'N/A'
             return phone.toString().replace(/\*/g, '')
         }
 
-        const getFileName = (filePath) => {
-            if (!filePath) return 'N/A'
-            return filePath.split('/').pop() || filePath
+        // function that formats the time for different format times.
+        const formatTime = (timeString) => {
+            if (!timeString || timeString === 'N/A') {
+                return 'N/A';
+            }
+
+            // Handle different time formats
+            let cleanTime = timeString.toString().trim();
+
+            // If already in HH:MM:SS format, just validate and return
+            if (/^\d{2}:\d{2}:\d{2}$/.test(cleanTime)) {
+                return cleanTime;
+            }
+
+            // If in HHMMSS format (6 digits), convert to HH:MM:SS
+            if (/^\d{6}$/.test(cleanTime)) {
+                const hours = cleanTime.substring(0, 2);
+                const minutes = cleanTime.substring(2, 4);
+                const seconds = cleanTime.substring(4, 6);
+                return `${hours}:${minutes}:${seconds}`;
+            }
+
+            // If in HHMM format (4 digits), convert to HH:MM:00
+            if (/^\d{4}$/.test(cleanTime)) {
+                const hours = cleanTime.substring(0, 2);
+                const minutes = cleanTime.substring(2, 4);
+                return `${hours}:${minutes}:00`;
+            }
+
+            // If it's a number, pad with zeros and format
+            if (/^\d+$/.test(cleanTime)) {
+                cleanTime = cleanTime.padStart(6, '0');
+                const hours = cleanTime.substring(0, 2);
+                const minutes = cleanTime.substring(2, 4);
+                const seconds = cleanTime.substring(4, 6);
+                return `${hours}:${minutes}:${seconds}`;
+            }
+
+            // Return as-is if format is unrecognized
+            return timeString;
         }
+
 
         // Watch for changes in props.data (when Inertia updates the data)
         watch(() => props.data, (newData) => {
@@ -265,7 +314,7 @@ export default {
             error,
             lastUpdated,
             refreshData,
-             downloadCurrentFile,
+            downloadCurrentFile,
             // Expose props as computed values for template
             fileName: props.fileName,
             totalRecords: props.totalRecords || props.data?.length || 0

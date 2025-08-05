@@ -353,7 +353,7 @@ private function displayResults(Collection $results, string $format): void
             $this->line('Transaction Date,Transaction Time,Amount,Mobile Number,Transaction ID');
             foreach ($results as $record) {
                 $this->line(sprintf(
-                    '%d,%s,%s,%s,%s',
+                    '%s,%s,%s,%s,%s',
                     $record['transaction_date'] ?? 'N/A',
                     $record['transaction_time'] ?? 'N/A',
                     $record['amount'] ?? 'N/A',

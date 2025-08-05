@@ -220,10 +220,11 @@ class MessageController extends Controller
                     if (trim($line)) {
                         $row = str_getcsv($line);
                         $data[] = [
-                            'date' => $row[0] ?? '',
-                            'amount' => $row[1] ?? '',
-                            'mobile_number' => $row[2] ?? '',
-                            'transaction_id' => $row[3] ?? '',
+                            'transaction_date' => $row[0] ?? '',
+                            'transaction_time' => $row[1] ?? '',
+                            'amount' => $row[2] ?? '',
+                            'mobile_number' => $row[3] ?? '',
+                            'transaction_id' => $row[4] ?? '',
                         ];
                     }
                 }
@@ -282,10 +283,11 @@ class MessageController extends Controller
 
             if (count($fields) >= 6) {
                 $transactions->push([
-                    'date' => $fields[0],
-                    'amount' => $fields[1],
-                    'mobile_number' => $fields[2],
-                    'transaction_id' => $fields[3]
+                    'transaction_date' => $fields[0],
+                    'transaction_time' => $fields[1],
+                    'amount' => $fields[2],
+                    'mobile_number' => $fields[3],
+                    'transaction_id' => $fields[4]
                 ]);
             }
         }
