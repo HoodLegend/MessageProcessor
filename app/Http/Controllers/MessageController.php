@@ -20,7 +20,7 @@ class MessageController extends Controller
         $availableDates = $this->getAvailableDates();
         $totalRecords = $this->getTotalRecords();
 
-        return inertia('Transactions/Index', [
+        return inertia('Messages', [
             'availableDates' => $availableDates,
             'initialDate' => $availableDates->first()['value'] ?? '',
             'totalRecords' => $totalRecords
