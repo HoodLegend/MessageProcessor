@@ -1,46 +1,83 @@
 <template>
-
     <Head title="Messages" />
     <AuthenticatedLayout>
         <!-- Header Section -->
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-8">
-            <!-- Header with Title and Button -->
+            <!-- Header with Title and Controls -->
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
-                <h2 class="text-2xl font-bold text-gray-900">Transaction Data</h2>
-                <div class="self-end sm:self-auto">
-                    <button @click="refreshData" :disabled="loading"
-                        class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
-                        <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
-                            <path class="opacity-75" fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                        </svg>
-                        {{ loading ? 'Loading...' : 'Refresh Data' }}
-                    </button>
-                    <button @click="downloadCurrentFile" :disabled="!currentFilePath"
-                        class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50 flex items-center gap-2 my-3">
-                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
-                            </path>
-                        </svg>
-                        Download Current CSV
-                    </button>
+                <h2 class="text-2xl font-bold text-gray-900">Transactions</h2>
+                <div class="flex flex-col sm:flex-row gap-2">
+                    <!-- Date Filter -->
+                    <div class="flex items-center gap-2">
+                        <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
+                        <select
+                            id="dateFilter"
+                            v-model="selectedDate"
+                            @change="onDateChange"
+                            class="form-select rounded border-gray-300 text-sm"
+                        >
+                            <option value="">All Dates</option>
+                            <option v-for="date in availableDates" :key="date.value" :value="date.value">
+                                {{ date.label }} ({{ date.count }} records)
+                            </option>
+                        </select>
+                    </div>
+
+                    <!-- Action Buttons -->
+                    <div class="flex gap-2">
+                        <button @click="refreshData" :disabled="loading"
+                            class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
+                            <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                            </svg>
+                            {{ loading ? 'Loading...' : 'Refresh' }}
+                        </button>
+
+                        <button @click="downloadCurrentData" :disabled="!hasData || loading"
+                            class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50 flex items-center gap-2">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
+                                </path>
+                            </svg>
+                            Download CSV
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <!-- Info Bar -->
-            <div class="bg-blue-50 border border-blue-200 text-blue-700 px-6 py-4 rounded mb-6 max-w-4xl mx-auto">
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                    <div><strong>File:</strong> {{ fileName || 'Latest transactions' }}</div>
-                    <div><strong>Records:</strong> {{ totalRecords }}</div>
+            <div class="bg-blue-50 border border-blue-200 text-blue-700 px-6 py-4 rounded mb-6">
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
+                    <div><strong>Selected Date:</strong> {{ selectedDate ? formatDisplayDate(selectedDate) : 'All Dates' }}</div>
+                    <div><strong>Available Files:</strong> {{ availableDates.length }}</div>
+                    <div><strong>Total Records:</strong> {{ totalRecords }}</div>
                     <div><strong>Last Updated:</strong> {{ lastUpdated }}</div>
                 </div>
             </div>
 
+            <!-- Date Range Quick Filters -->
+            <div class="flex flex-wrap gap-2 mb-6">
+                <button
+                    v-for="quickFilter in quickFilters"
+                    :key="quickFilter.value"
+                    @click="applyQuickFilter(quickFilter.value)"
+                    :class="[
+                        'px-3 py-1 text-xs rounded-full border transition-colors',
+                        quickFilter.active
+                            ? 'bg-blue-100 border-blue-300 text-blue-700'
+                            : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
+                    ]"
+                >
+                    {{ quickFilter.label }}
+                </button>
+            </div>
+
             <!-- Error Display -->
             <div v-if="error"
-                class="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded mb-6 max-w-4xl mx-auto">
+                class="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded mb-6">
                 <p>{{ error }}</p>
             </div>
         </div>
@@ -54,28 +91,24 @@
                             <thead class="bg-gray-100">
                                 <tr>
                                     <th class="px-4 py-2 font-semibold text-gray-700">Transaction ID</th>
-                                    <th class="px-4 py-2 font-semibold text-gray-700">Transaction Time</th>
                                     <th class="px-4 py-2 font-semibold text-gray-700">Transaction Date</th>
+                                    <th class="px-4 py-2 font-semibold text-gray-700">Transaction Time</th>
                                     <th class="px-4 py-2 font-semibold text-gray-700">Amount</th>
                                     <th class="px-4 py-2 font-semibold text-gray-700">Phone Number</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <!-- DataTables will populate this -->
+                                <!-- DataTables will populate this via server-side processing -->
                             </tbody>
                         </table>
                     </div>
-
                 </div>
             </div>
         </div>
-
     </AuthenticatedLayout>
-
-
 </template>
 
-<script>
+<script setup>
 import { ref, onMounted, onUnmounted, watch } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import $ from 'jquery';
@@ -83,244 +116,270 @@ import 'datatables.net';
 import 'datatables.net-dt/css/dataTables.dataTables.css';
 import AuthenticatedLayout from '@/Layouts/AuthenticatedLayout.vue';
 
-
-export default {
-    name: 'Messages',
-    components: {
-        AuthenticatedLayout,
-        Head
+const props = defineProps({
+    availableDates: {
+        type: Array,
+        default: () => []
     },
-    props: {
-        data: {
-            type: Array,
-            default: () => []
-        },
-        fileName: {
-            type: String,
-            default: ''
-        },
-        totalRecords: {
-            type: Number,
-            default: 0
-        },
-        currentFilePath: String,
+    initialDate: {
+        type: String,
+        default: ''
     },
-    setup(props) {
-        const loading = ref(false)
-        const error = ref(null)
-        const lastUpdated = ref(new Date().toLocaleString())
-        let dataTable = null
+    totalRecords: {
+        type: Number,
+        default: 0
+    }
+})
 
-        const initializeDataTable = () => {
-            if (dataTable) {
-                dataTable.destroy()
-            }
+// Reactive Data
+const selectedDate = ref(props.initialDate)
+const loading = ref(false)
+const error = ref('')
+const lastUpdated = ref(new Date().toLocaleString())
+const dataTable = ref(null)
 
-            dataTable = $('#transactionsTable').DataTable({
-                data: props.data || [],
-                columns: [
-                    {
-                        data: 'transaction_id',
-                        title: 'Transaction ID',
-                        render: function (data) {
-                            return data || 'N/A'
-                        }
-                    },
-                    {
-                        data: 'transaction_date',
-                        title: 'Transaction Date',
-                        render: function (data) {
-                            return formatDate(data)
-                        }
-                    },
-                    {
-                        data: 'transaction_time',
-                        title: 'Transaction Time',
-                        render: function (data) {
-                            return formatTime(data)
-                        }
-                    },
-                    {
-                        data: 'amount',
-                        title: 'Amount',
-                        render: function (data) {
-                            return formatAmount(data)
-                        },
-                        className: 'text-right'
-                    },
-                    {
-                        data: 'mobile_number',
-                        title: 'Phone Number',
-                        render: function (data) {
-                            return formatPhoneNumber(data)
-                        }
-                    },
-                ],
-                pageLength: 25,
-                lengthMenu: [[10, 25, 50, 100, -1], [10, 25, 50, 100, "All"]],
-                order: [[1, 'desc']], // Sort by date descending
-                responsive: true,
-                processing: false, // No need for processing indicator with Inertia
-                language: {
-                    emptyTable: "No transaction data available",
-                    info: "Showing _START_ to _END_ of _TOTAL_ transactions",
-                    infoEmpty: "Showing 0 to 0 of 0 transactions",
-                    infoFiltered: "(filtered from _MAX_ total transactions)",
-                    lengthMenu: "Show _MENU_ transactions per page",
-                    search: "Search transactions:",
-                    zeroRecords: "No matching transactions found"
-                },
-                dom: '<"flex justify-between items-center mb-4"<"flex items-center gap-2"l><"flex items-center gap-2"f>>rtip',
-                initComplete: function () {
-                    // Custom styling after table initialization
-                    $('.dataTables_length select').addClass('form-select rounded border-gray-300')
-                    $('.dataTables_filter input').addClass('form-input rounded border-gray-300')
-                }
-            })
+// Computed properties
+const hasData = computed(() => dataTable.value && dataTable.value.data().count() > 0)
 
-            console.log('DataTable initialized with', props.data?.length || 0, 'records')
-        }
+const quickFilters = computed(() => {
+    const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
+    const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0].replace(/-/g, '')
+    const lastWeek = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0].replace(/-/g, '')
 
-        const downloadCurrentFile = () => {
-            if (props.currentFilePath) {
-                const filename = props.currentFilePath.split('/').pop()
-                const link = document.createElement('a')
-                link.href = `/transactions/download/${encodeURIComponent(filename)}`
-                link.download = filename
-                document.body.appendChild(link)
-                link.click()
-                document.body.removeChild(link)
-            }
-        }
+    return [
+        { label: 'All', value: '', active: selectedDate.value === '' },
+        { label: 'Today', value: today, active: selectedDate.value === today },
+        { label: 'Yesterday', value: yesterday, active: selectedDate.value === yesterday },
+        { label: 'Last 7 Days', value: 'last7', active: selectedDate.value === 'last7' },
+        { label: 'This Month', value: 'thisMonth', active: selectedDate.value === 'thisMonth' }
+    ]
+})
 
-        const refreshData = () => {
-            loading.value = true
-            error.value = null
+const initializeDataTable = () => {
+    if (dataTable.value) {
+        dataTable.value.destroy()
+    }
 
-            // Use Inertia to reload the page with fresh data
-            router.reload({
-                onSuccess: () => {
-                    loading.value = false
-                    lastUpdated.value = new Date().toLocaleString()
-                    console.log('Data refreshed via Inertia')
-                },
-                onError: (errors) => {
-                    loading.value = false
-                    error.value = 'Failed to refresh data'
-                    console.error('Inertia reload error:', errors)
-                }
-            })
-        }
-
-        // format the data correctly
-        const formatDate = (dateString) => {
-            if (!dateString) return 'N/A'
-            try {
-                const date = new Date(dateString)
-                return date.toLocaleDateString('en-US', {
-                    year: 'numeric',
-                    month: 'short',
-                    day: 'numeric'
-                })
-            } catch {
-                return dateString
-            }
-        }
-
-        // correctly formats the amount of money that has been transacted.
-        const formatAmount = (amount) => {
-            if (!amount) return 'N/A'
-            const cleanAmount = amount.toString().replace(/\*/g, '')
-            const numAmount = parseFloat(cleanAmount)
-            if (isNaN(numAmount)) return amount
-
-            return new Intl.NumberFormat('en-US', {
-                style: 'currency',
-                currency: 'NAD'
-            }).format(numAmount)
-        }
-
-        // formats the phone Number correctly.
-        const formatPhoneNumber = (phone) => {
-            if (!phone) return 'N/A'
-            return phone.toString().replace(/\*/g, '')
-        }
-
-        // function that formats the time for different format times.
-        const formatTime = (timeString) => {
-            if (!timeString || timeString === 'N/A') {
-                return 'N/A';
-            }
-
-            // Handle different time formats
-            let cleanTime = timeString.toString().trim();
-
-            // If already in HH:MM:SS format, just validate and return
-            if (/^\d{2}:\d{2}:\d{2}$/.test(cleanTime)) {
-                return cleanTime;
-            }
-
-            // If in HHMMSS format (6 digits), convert to HH:MM:SS
-            if (/^\d{6}$/.test(cleanTime)) {
-                const hours = cleanTime.substring(0, 2);
-                const minutes = cleanTime.substring(2, 4);
-                const seconds = cleanTime.substring(4, 6);
-                return `${hours}:${minutes}:${seconds}`;
-            }
-
-            // If in HHMM format (4 digits), convert to HH:MM:00
-            if (/^\d{4}$/.test(cleanTime)) {
-                const hours = cleanTime.substring(0, 2);
-                const minutes = cleanTime.substring(2, 4);
-                return `${hours}:${minutes}:00`;
-            }
-
-            // If it's a number, pad with zeros and format
-            if (/^\d+$/.test(cleanTime)) {
-                cleanTime = cleanTime.padStart(6, '0');
-                const hours = cleanTime.substring(0, 2);
-                const minutes = cleanTime.substring(2, 4);
-                const seconds = cleanTime.substring(4, 6);
-                return `${hours}:${minutes}:${seconds}`;
-            }
-
-            // Return as-is if format is unrecognized
-            return timeString;
-        }
-
-
-        // Watch for changes in props.data (when Inertia updates the data)
-        watch(() => props.data, (newData) => {
-            console.log('Data prop changed, updating DataTable with', newData?.length || 0, 'records')
-            if (dataTable) {
-                dataTable.clear().rows.add(newData || []).draw()
+    dataTable.value = $('#transactionsTable').DataTable({
+        processing: true,
+        serverSide: true,
+        ajax: {
+            url: route('transactions.data'),
+            type: 'POST',
+            data: function(d) {
+                // Add custom filters to the request
+                d.date_filter = selectedDate.value
+                d._token = document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                return d
+            },
+            dataSrc: function(json) {
+                // Update UI with server response data
                 lastUpdated.value = new Date().toLocaleString()
+                error.value = json.error || ''
+                return json.data
+            },
+            error: function(xhr, error, thrown) {
+                console.error('DataTable AJAX error:', error)
+                error.value = 'Failed to load transaction data. Please try again.'
             }
-        }, { deep: true })
-
-        onMounted(() => {
-            console.log('Component mounted with data:', props.data?.length || 0, 'records')
-            initializeDataTable()
-        })
-
-        onUnmounted(() => {
-            if (dataTable) {
-                dataTable.destroy()
+        },
+        columns: [
+            {
+                data: 'transaction_id',
+                title: 'Transaction ID',
+                render: function (data) {
+                    return data || 'N/A'
+                }
+            },
+            {
+                data: 'transaction_date',
+                title: 'Transaction Date',
+                render: function (data) {
+                    return formatDate(data)
+                }
+            },
+            {
+                data: 'transaction_time',
+                title: 'Transaction Time',
+                render: function (data) {
+                    return formatTime(data)
+                }
+            },
+            {
+                data: 'amount',
+                title: 'Amount',
+                render: function (data) {
+                    return formatAmount(data)
+                },
+                className: 'text-right'
+            },
+            {
+                data: 'mobile_number',
+                title: 'Phone Number',
+                render: function (data) {
+                    return formatPhoneNumber(data)
+                }
             }
-        })
-
-        return {
-            loading,
-            error,
-            lastUpdated,
-            refreshData,
-            downloadCurrentFile,
-            // Expose props as computed values for template
-            fileName: props.fileName,
-            totalRecords: props.totalRecords || props.data?.length || 0
+        ],
+        pageLength: 25,
+        lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+        order: [[1, 'desc']], // Sort by date descending
+        responsive: true,
+        language: {
+            emptyTable: "No transaction data available for selected date",
+            info: "Showing _START_ to _END_ of _TOTAL_ transactions",
+            infoEmpty: "Showing 0 to 0 of 0 transactions",
+            infoFiltered: "(filtered from _MAX_ total transactions)",
+            lengthMenu: "Show _MENU_ transactions per page",
+            search: "Search transactions:",
+            zeroRecords: "No matching transactions found",
+            processing: "Loading transaction data..."
+        },
+        dom: '<"flex justify-between items-center mb-4"<"flex items-center gap-2"l><"flex items-center gap-2"f>>rtip',
+        initComplete: function () {
+            $('.dataTables_length select').addClass('form-select rounded border-gray-300')
+            $('.dataTables_filter input').addClass('form-input rounded border-gray-300')
         }
+    })
+}
+
+const onDateChange = () => {
+    loading.value = true
+    error.value = ''
+
+    // Reload the DataTable with new date filter
+    if (dataTable.value) {
+        dataTable.value.ajax.reload(() => {
+            loading.value = false
+        })
     }
 }
+
+const applyQuickFilter = (filterValue) => {
+    selectedDate.value = filterValue
+    onDateChange()
+}
+
+const refreshData = () => {
+    loading.value = true
+    error.value = ''
+
+    // Refresh available dates and reload table
+    router.reload({
+        onSuccess: () => {
+            if (dataTable.value) {
+                dataTable.value.ajax.reload(() => {
+                    loading.value = false
+                })
+            } else {
+                loading.value = false
+            }
+        },
+        onError: () => {
+            loading.value = false
+            error.value = 'Failed to refresh data. Please try again.'
+        }
+    })
+}
+
+const downloadCurrentData = () => {
+    const params = new URLSearchParams({
+        date_filter: selectedDate.value || '',
+        format: 'csv'
+    })
+
+    window.open(route('transactions.export') + '?' + params.toString(), '_blank')
+}
+// Formatting functions that format the date, amount, phonenumber, time for better representation.
+const formatDate = (dateString) => {
+    if (!dateString || dateString === 'N/A') return 'N/A'
+
+    try {
+        const date = new Date(dateString)
+        return date.toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        })
+    } catch (e) {
+        return dateString
+    }
+}
+
+const formatDisplayDate = (dateString) => {
+    if (!dateString) return ''
+
+    try {
+        // Convert YYYYMMDD to YYYY-MM-DD for parsing
+        const formatted = dateString.replace(/(\d{4})(\d{2})(\d{2})/, '$1-$2-$3')
+        const date = new Date(formatted)
+        return date.toLocaleDateString('en-US', {
+            weekday: 'long',
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric'
+        })
+    } catch (e) {
+        return dateString
+    }
+}
+
+const formatTime = (timeString) => {
+    if (!timeString || timeString === 'N/A') return 'N/A'
+
+    let cleanTime = timeString.toString().trim()
+
+    if (/^\d{2}:\d{2}:\d{2}$/.test(cleanTime)) {
+        return cleanTime
+    }
+
+    if (/^\d{6}$/.test(cleanTime)) {
+        const hours = cleanTime.substring(0, 2)
+        const minutes = cleanTime.substring(2, 4)
+        const seconds = cleanTime.substring(4, 6)
+        return `${hours}:${minutes}:${seconds}`
+    }
+
+    return timeString
+}
+
+const formatAmount = (amount) => {
+    if (!amount || amount === 'N/A') return 'N/A'
+
+    try {
+        const numAmount = parseFloat(amount)
+        return new Intl.NumberFormat('en-US', {
+            style: 'currency',
+            currency: 'NAD',
+            minimumFractionDigits: 2
+        }).format(numAmount)
+    } catch (e) {
+        return amount
+    }
+}
+
+const formatPhoneNumber = (phone) => {
+    if (!phone || phone === 'N/A') return 'N/A'
+
+    const cleaned = phone.toString().replace(/\D/g, '')
+
+    if (cleaned.length === 10) {
+        return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`
+    }
+
+    return phone
+}
+
+// Lifecycle
+onMounted(() => {
+    initializeDataTable()
+})
+
+onUnmounted(() => {
+    if (dataTable.value) {
+        dataTable.value.destroy()
+    }
+})
 </script>
 
 <style>

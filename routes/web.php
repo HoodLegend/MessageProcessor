@@ -26,20 +26,34 @@ Route::middleware('auth')->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
-    Route::get('/messages', [MessageController::class, 'getCsvData'])->name('messages.index');
-    Route::get('/upload-file', [MessageController::class, "uploadForm"])->name('messages.upload');
+    // Route::get('/messages', [MessageController::class, 'getCsvData'])->name('messages.index');
+    // Route::get('/upload-file', [MessageController::class, "uploadForm"])->name('messages.upload');
     Route::get('/transactions/download/{filename}', [MessageController::class, 'downloadCsv'])->name('transactions.download');
 });
 
 // Route::get('/messages', [MessageController::class, 'index'])->name('messages.index');
 // Route::get('/upload-file', [MessageController::class, "uploadForm"])->name('messages.upload');
 
-Route::group( [], function () {
-    Route::post('/upload', [MessageController::class, 'upload'])->name("message.upload");
-    Route::post('/process-path', [MessageController::class, 'processFromPath'])->name('messages.store');
-    Route::get('/stats', [MessageController::class, 'getStats'])->name("transaction.status");
-    Route::get('/messages/{id}', [MessageController::class, 'show'])->name('messages.show');
-    Route::post('/cleanup', [MessageController::class, 'cleanup']);
+// Route::group( [], function () {
+//     Route::post('/upload', [MessageController::class, 'upload'])->name("message.upload");
+//     Route::post('/process-path', [MessageController::class, 'processFromPath'])->name('messages.store');
+//     Route::get('/stats', [MessageController::class, 'getStats'])->name("transaction.status");
+//     Route::get('/messages/{id}', [MessageController::class, 'show'])->name('messages.show');
+//     Route::post('/cleanup', [MessageController::class, 'cleanup']);
+// });
+
+Route::middleware(['auth', 'verified'])->group(function () {
+    // Main transactions page
+    Route::get('/transactions', [MessageController::class, 'index'])
+         ->name('transactions.index');
+
+    // Server-side data endpoint for DataTables
+    Route::post('/transactions/data', [MessageController::class, 'getData'])
+         ->name('transactions.data');
+
+    // Export endpoint
+    Route::get('/transactions/export', [MessageController::class, 'export'])
+         ->name('transactions.export');
 });
 
 require __DIR__.'/auth.php';
