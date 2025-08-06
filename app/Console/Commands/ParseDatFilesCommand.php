@@ -449,9 +449,33 @@ private function saveResults(Collection $results): void
             }
 
             // Convert array to CSV string
-            $csvString = collect($csvData)->map(function ($row) {
-                return implode(',', $row);
-            })->implode("\n");
+                $csvString = '';
+                foreach ($csvData as $rowIndex => $row) {
+                    $this->line("Processing row {$rowIndex}: " . json_encode($row));
+
+                    try {
+                        // Ensure all values are strings
+                        $cleanRow = [];
+                        foreach ($row as $columnIndex => $value) {
+                            if (is_array($value)) {
+                                $this->warn("Array found in row {$rowIndex}, column {$columnIndex}: " . json_encode($value));
+                                $cleanRow[] = json_encode($value);
+                            } elseif (is_object($value)) {
+                                $this->warn("Object found in row {$rowIndex}, column {$columnIndex}");
+                                $cleanRow[] = json_encode($value);
+                            } else {
+                                $cleanRow[] = (string) ($value ?? 'N/A');
+                            }
+                        }
+
+                        $csvString .= implode(',', $cleanRow) . "\n";
+                    } catch (\Exception $e) {
+                        $this->error("Error in row {$rowIndex}: " . $e->getMessage());
+                        $this->error("Row data: " . json_encode($row));
+                        throw $e;
+                    }
+                }
+                $csvString = rtrim($csvString, "\n");
 
             // Save the file
             if (Storage::put($filePath, $csvString)) {
