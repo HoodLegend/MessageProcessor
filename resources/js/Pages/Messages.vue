@@ -169,7 +169,14 @@ const initializeDataTable = () => {
             data: function(d) {
                 // Add custom filters to the request
                 d.date_filter = selectedDate.value
-                d._token = document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                // d._token = document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                const tokenMeta = document.querySelector('meta[name="csrf-token"]')
+                if (tokenMeta) {
+                    d._token = tokenMeta.getAttribute('content')
+                } else {
+                    console.warn('CSRF token meta tag not found')
+                }
+
                 return d
             },
             dataSrc: function(json) {
