@@ -163,7 +163,7 @@ class MessageController extends Controller
             $filename = basename($file, '.csv');
 
             // Extract date from filename
-            if (preg_match('/transactions_(\d{8})/', $filename, $matches)) {
+            if (preg_match('/(\d{8})/', $filename, $matches)) {
                 $fileDateString = $matches[1];
 
                 // Apply date filter
