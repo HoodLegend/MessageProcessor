@@ -144,7 +144,7 @@ class MessageController extends Controller
     /**
      * Get transaction data based on date filter
      */
-    private function getTransactionData(?string $dateFilter = null): Collection
+    private function getTransactionData(?string $dateFilter = ''): Collection
     {
         $allData = collect();
         $exportDirectory = 'exports';
