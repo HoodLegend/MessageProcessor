@@ -382,70 +382,142 @@ private function displayResults(Collection $results, string $format): void
     /**
      * Save results to a CSV file in storage/app/exports/
      */
-    private function saveResults(Collection $results): void
-    {
-        $directory = 'exports';
-
-        if (!Storage::exists($directory)) {
-            Storage::makeDirectory($directory);
-        }
-
-        $dataDate = $this->extractDateFromResults($results);
-
-        // $filename = 'transactions_' . now()->format('Ymd_His') . '.csv';
-             $filename = $dataDate . '.csv';
-        $filePath = "{$directory}/{$filename}";
-
-        $csvData = [];
-
-        // Header
-        $csvData[] = ['Transaction Date','Transaction Time','Amount', 'Mobile Number', 'Transaction ID'];
-
-        // Data rows
-        foreach ($results as $record) {
-            $csvData[] = [
-                $record['transaction_date'],
-                $record['transaction_time'] ?? 'N/A',
-                $record['amount'],
-                $record['mobile_number'],
-                $record['transaction_id']
-            ];
-        }
-
-        // Convert array to CSV string
-        $csvString = collect($csvData)->map(function ($row) {
-            return implode(',', $row);
-        })->implode("\n");
-
-        Storage::put($filePath, $csvString);
-
-        $this->info("✓ Results saved to storage/app/{$filePath}");
-    }
-
-    private function extractDateFromResults(Collection $results): string
+private function saveResults(Collection $results): void
 {
-    if ($results->isEmpty()) {
-        return now()->format('Ymd');
+    $directory = 'exports';
+    if (!Storage::exists($directory)) {
+        Storage::makeDirectory($directory);
     }
 
-    // Count occurrences of each date
-    $dateCounts = $results->groupBy('transaction_date')->map->count();
+    // Group results by transaction date
+    $groupedByDate = $results->groupBy('transaction_date');
 
-    // Get the most frequent date
-    $mostCommonDate = $dateCounts->keys()->sortByDesc(function($date) use ($dateCounts) {
-        return $dateCounts[$date];
-    })->first();
-
-    if (!$mostCommonDate) {
-        return now()->format('Ymd');
+    if ($groupedByDate->isEmpty()) {
+        $this->warn("No results to save");
+        return;
     }
 
-    try {
-        $date = \Carbon\Carbon::parse($mostCommonDate);
-        return $date->format('Ymd');
-    } catch (\Exception $e) {
-        $this->warn("Could not parse date '{$mostCommonDate}', using current date");
-        return now()->format('Ymd');
+    $this->info("Grouping transactions by date. Found " . $groupedByDate->count() . " different dates.");
+
+    $totalFiles = 0;
+    $totalRecords = 0;
+
+    foreach ($groupedByDate as $date => $dateRecords) {
+        try {
+            // Create filename based on the transaction date
+            $filename = $this->createFilenameFromDate($date);
+            $filePath = "{$directory}/{$filename}";
+
+            $this->line("Processing date: {$date} ({$dateRecords->count()} records)");
+
+            // Check if file already exists and decide how to handle it
+            if (Storage::exists($filePath)) {
+                $this->warn("  File already exists: {$filename}");
+
+                // Option 1: Append to existing file
+                $existingContent = Storage::get($filePath);
+                $existingLines = explode("\n", trim($existingContent));
+
+                // Remove header if it exists in existing file
+                if (!empty($existingLines) && strpos($existingLines[0], 'Transaction Date') !== false) {
+                    array_shift($existingLines);
+                }
+
+                $csvData = $existingLines;
+
+                // Option 2: Alternative - create versioned filename
+                // $timestamp = now()->format('His');
+                // $filename = pathinfo($filename, PATHINFO_FILENAME) . "_{$timestamp}." . pathinfo($filename, PATHINFO_EXTENSION);
+                // $filePath = "{$directory}/{$filename}";
+                // $csvData = [];
+                // $csvData[] = ['Transaction Date','Transaction Time','Amount', 'Mobile Number', 'Transaction ID'];
+            } else {
+                $csvData = [];
+                // Add header for new file
+                $csvData[] = ['Transaction Date','Transaction Time','Amount', 'Mobile Number', 'Transaction ID'];
+            }
+
+            // Add data rows for this date
+            foreach ($dateRecords as $record) {
+                $csvData[] = [
+                    $record['transaction_date'] ?? 'N/A',
+                    $record['transaction_time'] ?? 'N/A',
+                    $record['amount'] ?? 'N/A',
+                    $record['mobile_number'] ?? 'N/A',
+                    $record['transaction_id'] ?? 'N/A'
+                ];
+            }
+
+            // Convert array to CSV string
+            $csvString = collect($csvData)->map(function ($row) {
+                return implode(',', $row);
+            })->implode("\n");
+
+            // Save the file
+            if (Storage::put($filePath, $csvString)) {
+                $totalFiles++;
+                $totalRecords += $dateRecords->count();
+                $this->info("  ✓ Saved: storage/app/{$filePath} ({$dateRecords->count()} records)");
+            } else {
+                $this->error("  ✗ Failed to save: {$filename}");
+            }
+
+        } catch (\Exception $e) {
+            $this->error("  ✗ Error saving data for date {$date}: " . $e->getMessage());
+        }
+    }
+
+    // Summary
+    $this->info("\n" . str_repeat('=', 50));
+    $this->info("EXPORT SUMMARY");
+    $this->info(str_repeat('=', 50));
+    $this->info("Total CSV files created: {$totalFiles}");
+    $this->info("Total records exported: {$totalRecords}");
+    $this->info("Files saved in: storage/app/{$directory}/");
+
+    // List all created files
+    if ($totalFiles > 0) {
+        $this->info("\nCreated files:");
+        foreach ($groupedByDate->keys() as $date) {
+            $filename = $this->createFilenameFromDate($date);
+            $this->line("  - {$filename}");
+        }
     }
 }
+
+/**
+ * Create a filename from a date string
+ */
+private function createFilenameFromDate(string $date): string
+{
+    try {
+        // Handle different date formats
+        if (strpos($date, '-') !== false) {
+            // Format: 2025-07-10 or similar
+            $cleanDate = str_replace('-', '', $date);
+        } else {
+            // Format: 20250710 or similar
+            $cleanDate = $date;
+        }
+
+        // Ensure we have a valid date format (YYYYMMDD)
+        if (preg_match('/^(\d{4})(\d{2})(\d{2})/', $cleanDate, $matches)) {
+            $year = $matches[1];
+            $month = $matches[2];
+            $day = $matches[3];
+            return "{$year}{$month}{$day}.csv";
+        }
+
+        // Fallback if date format is unexpected
+        $cleanDate = preg_replace('/[^0-9]/', '', $date);
+        return "{$cleanDate}.csv";
+
+    } catch (\Exception $e) {
+        // Ultimate fallback
+        $timestamp = now()->format('Ymd_His');
+        return "{$timestamp}.csv";
+    }
+}
+
+
 }
