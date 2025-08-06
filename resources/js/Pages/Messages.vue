@@ -109,7 +109,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue';
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue';
 import { Head, router } from '@inertiajs/vue3';
 import $ from 'jquery';
 import 'datatables.net';
