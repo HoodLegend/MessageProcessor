@@ -185,8 +185,8 @@ const initializeDataTable = () => {
                 error.value = json.error || ''
                 return json.data
             },
-            error: function(xhr, ajaxerror, thrown) {
-                console.error('DataTable AJAX error:', ajaxerror)
+            error: function(xhr, error, thrown) {
+                console.error('DataTable AJAX error:', error)
                 error.value = 'Failed to load transaction data. Please try again.'
             }
         },
