@@ -423,14 +423,7 @@ private function saveResults(Collection $results): void
                     array_shift($existingLines);
                 }
 
-                $csvData = $existingLines;
-
-                // Option 2: Alternative - create versioned filename
-                // $timestamp = now()->format('His');
-                // $filename = pathinfo($filename, PATHINFO_FILENAME) . "_{$timestamp}." . pathinfo($filename, PATHINFO_EXTENSION);
-                // $filePath = "{$directory}/{$filename}";
-                // $csvData = [];
-                // $csvData[] = ['Transaction Date','Transaction Time','Amount', 'Mobile Number', 'Transaction ID'];
+                $csvData = array_map('str_getcsv', $existingLines);
             } else {
                 $csvData = [];
                 // Add header for new file
@@ -449,33 +442,38 @@ private function saveResults(Collection $results): void
             }
 
             // Convert array to CSV string
-                $csvString = '';
-                foreach ($csvData as $rowIndex => $row) {
-                    $this->line("Processing row {$rowIndex}: " . json_encode($row));
+ $csvString = '';
+            foreach ($csvData as $rowIndex => $row) {
+                $this->line("Processing row {$rowIndex}: " . json_encode($row));
 
-                    try {
-                        // Ensure all values are strings
-                        $cleanRow = [];
-                        foreach ($row as $columnIndex => $value) {
-                            if (is_array($value)) {
-                                $this->warn("Array found in row {$rowIndex}, column {$columnIndex}: " . json_encode($value));
-                                $cleanRow[] = json_encode($value);
-                            } elseif (is_object($value)) {
-                                $this->warn("Object found in row {$rowIndex}, column {$columnIndex}");
-                                $cleanRow[] = json_encode($value);
-                            } else {
-                                $cleanRow[] = (string) ($value ?? 'N/A');
-                            }
-                        }
-
-                        $csvString .= implode(',', $cleanRow) . "\n";
-                    } catch (\Exception $e) {
-                        $this->error("Error in row {$rowIndex}: " . $e->getMessage());
-                        $this->error("Row data: " . json_encode($row));
-                        throw $e;
+                try {
+                    if (!is_array($row)) {
+                        $this->warn("  ⚠ Row {$rowIndex} is not an array — attempting to convert with str_getcsv.");
+                        $row = str_getcsv($row);
                     }
+
+                    $cleanRow = [];
+                    foreach ($row as $columnIndex => $value) {
+                        if (is_array($value)) {
+                            $this->warn("Array in row {$rowIndex}, column {$columnIndex}: " . json_encode($value));
+                            $cleanRow[] = json_encode($value);
+                        } elseif (is_object($value)) {
+                            $this->warn("Object in row {$rowIndex}, column {$columnIndex}");
+                            $cleanRow[] = json_encode($value);
+                        } else {
+                            $cleanRow[] = (string) ($value ?? 'N/A');
+                        }
+                    }
+
+                    $csvString .= implode(',', $cleanRow) . "\n";
+                } catch (\Exception $e) {
+                    $this->error("Error in row {$rowIndex}: " . $e->getMessage());
+                    $this->error("Row data: " . json_encode($row));
+                    throw $e;
                 }
-                $csvString = rtrim($csvString, "\n");
+            }
+
+            $csvString = rtrim($csvString, "\n");
 
             // Save the file
             if (Storage::put($filePath, $csvString)) {
