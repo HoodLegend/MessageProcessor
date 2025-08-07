@@ -15,11 +15,10 @@ class MessageController extends Controller
     /**
      * Display a list of all CSV files and their data
      */
-    public function index(Request $request)
+    public function index()
     {
-        $dateFilter = (string) $request->input('date_filter', '');
-        $availableDates = $this->getAvailableDates($dateFilter);
-        $totalRecords = $this->getCachedTransactionCount($dateFilter);
+        $availableDates = $this->getAvailableDates();
+        $totalRecords = $this->getTotalRecords();
 
         return Inertia::render('Messages', [
             'availableDates' => $availableDates,

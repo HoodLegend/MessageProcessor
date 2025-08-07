@@ -136,10 +136,11 @@ const selectedDate = ref(props.initialDate)
 const loading = ref(false)
 const error = ref('')
 const lastUpdated = ref(new Date().toLocaleString())
+const hasRecords = ref(false)
 const dataTable = ref(null)
 
 // Computed properties
-const hasData = computed(() => dataTable.value && dataTable.value.data().count() > 0)
+const hasData = computed(() => /* dataTable.value && dataTable.value.data().count() > 0 */ hasRecords.value)
 
 const quickFilters = computed(() => {
     const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
@@ -183,6 +184,7 @@ const initializeDataTable = () => {
                 // Update UI with server response data
                 lastUpdated.value = new Date().toLocaleString()
                 error.value = json.error || ''
+                hasRecords.value = json.data.length > 0
                 return json.data
             },
             error: function(xhr, error, thrown) {
