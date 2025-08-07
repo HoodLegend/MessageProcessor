@@ -145,31 +145,32 @@ class MessageController extends Controller
      * Get transaction data based on date filter
      */
     private function getTransactionData(?string $dateFilter = ''): LazyCollection
-
     {
         $exportDirectory = 'exports';
         if (!Storage::exists($exportDirectory)) {
-            return;
+            return LazyCollection::empty();
         }
 
         $files = Storage::files($exportDirectory);
-        foreach ($files as $file) {
-            if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv') {
-                continue;
-            }
 
-            $filename = basename($file, '.csv');
-            if (preg_match('/(\d{8})/', $filename, $matches)) {
-                $fileDateString = $matches[1];
-                if ($this->shouldIncludeFile($fileDateString, $dateFilter)) {
-                    // Yield each row instead of collecting all data
-                    $fileData = $this->parseCSVFile($file);
-                    foreach ($fileData as $row) {
-                        yield $row;
+        return LazyCollection::make(function () use ($files, $dateFilter) {
+            foreach ($files as $file) {
+                if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv') {
+                    continue;
+                }
+
+                $filename = basename($file, '.csv');
+                if (preg_match('/(\d{8})/', $filename, $matches)) {
+                    $fileDateString = $matches[1];
+                    if ($this->shouldIncludeFile($fileDateString, $dateFilter)) {
+                        $fileData = $this->parseCSVFile($file);
+                        foreach ($fileData as $row) {
+                            yield $row;
+                        }
                     }
                 }
             }
-        }
+        });
     }
 
     /**
