@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use Carbon\Carbon;
+use Illuminate\Container\Attributes\Cache;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
@@ -40,11 +41,11 @@ class MessageController extends Controller
 
             // Use custom method that streams only a page of data
             $data = $this->getTransactionPage($dateFilter, $start, $length);
-
+            $totalRecords = $this->getCachedTransactionCount($dateFilter);
             return response()->json([
                 'draw' => intval($draw),
-                'recordsTotal' => 0, // Optional: replace with real count from cache if needed
-                'recordsFiltered' => 0, // Same as above
+                'recordsTotal' => $totalRecords, // Optional: replace with real count from cache if needed
+                'recordsFiltered' => $totalRecords, // Same as above
                 'data' => $data->toArray()
             ]);
 
@@ -126,8 +127,54 @@ class MessageController extends Controller
         return $rows;
     }
 
+    private function getCachedTransactionCount(string $dateFilter): int
+    {
+        $cacheKey = 'transaction_count_' . ($dateFilter ?: 'all');
 
-        /**
+        return Cache::remember($cacheKey, now()->addMinutes(10), function () use ($dateFilter) {
+            $count = 0;
+            $exportDirectory = 'exports';
+            $files = Storage::files($exportDirectory);
+
+            foreach ($files as $file) {
+                if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv')
+                    continue;
+
+                $filename = basename($file, '.csv');
+                if (!preg_match('/(\d{8})/', $filename, $matches))
+                    continue;
+
+                $fileDate = $matches[1];
+                if (!$this->shouldIncludeFile($fileDate, $dateFilter))
+                    continue;
+
+                $stream = Storage::readStream($file);
+                if (!$stream)
+                    continue;
+
+                $headerSkipped = false;
+
+                while (($line = fgets($stream)) !== false) {
+                    if (!$headerSkipped) {
+                        $headerSkipped = true;
+                        continue;
+                    }
+
+                    if (trim($line) !== '') {
+                        $count++;
+                    }
+                }
+
+                fclose($stream);
+            }
+
+            return $count;
+        });
+    }
+
+
+
+    /**
      * Export transactions data
      */
     public function export(Request $request)
@@ -163,7 +210,7 @@ class MessageController extends Controller
                 $filename = basename($file, '.csv');
 
                 // Extract date from filename (assuming format: transactions_YYYYMMDD.csv)
-                if (preg_match('/transactions_(\d{8})/', $filename, $matches)) {
+                if (preg_match('/(\d{8})/', $filename, $matches)) {
                     $dateString = $matches[1];
                     $recordCount = $this->getRecordCount($file);
 
