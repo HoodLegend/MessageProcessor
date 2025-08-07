@@ -198,41 +198,42 @@ class MessageController extends Controller
     /**
      * Parse CSV file and return data collection
      */
-    private function parseCSVFile(string $filePath): Collection
+    private function parseCSVFile(string $filePath): LazyCollection
     {
-        try {
-            $content = Storage::get($filePath);
-            $lines = explode("\n", trim($content));
+        return LazyCollection::make(function () use ($filePath) {
+            $stream = Storage::readStream($filePath);
 
-            // Remove header line
-            if (!empty($lines) && strpos($lines[0], 'Transaction Date') !== false) {
-                array_shift($lines);
+            if (!$stream) {
+                \Log::error("Failed to open file: $filePath");
+                return;
             }
 
-            $data = collect();
+            $headerSkipped = false;
 
-            foreach ($lines as $line) {
-                if (trim($line) === '') continue;
+            while (($line = fgets($stream)) !== false) {
+                if (!$headerSkipped) {
+                    $headerSkipped = true;
+                    continue; // Skip the header
+                }
+
+                if (trim($line) === '')
+                    continue;
 
                 $columns = str_getcsv($line);
 
                 if (count($columns) >= 5) {
-                    $data->push([
+                    yield [
                         'transaction_date' => $columns[0] ?? '',
                         'transaction_time' => $columns[1] ?? '',
                         'amount' => $columns[2] ?? '',
                         'mobile_number' => $columns[3] ?? '',
                         'transaction_id' => $columns[4] ?? ''
-                    ]);
+                    ];
                 }
             }
 
-            return $data;
-
-        } catch (\Exception $e) {
-            \Log::error("Error parsing CSV file {$filePath}: " . $e->getMessage());
-            return collect();
-        }
+            fclose($stream);
+        });
     }
 
  /**
