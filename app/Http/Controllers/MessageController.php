@@ -126,51 +126,61 @@ class MessageController extends Controller
 
         return $rows;
     }
+private function getCachedTransactionCount(string $dateFilter): int
+{
+    $cacheKey = 'transaction_count_' . ($dateFilter ?: 'all');
+    $datesCacheKey = 'available_dates_' . ($dateFilter ?: 'all');
 
-    private function getCachedTransactionCount(string $dateFilter): int
-    {
-        $cacheKey = 'transaction_count_' . ($dateFilter ?: 'all');
+    // Cache available dates (only once)
+    Cache::remember($datesCacheKey, now()->addMinutes(10), function () use ($dateFilter) {
+        return $this->getAvailableDates($dateFilter);
+    });
 
-        return Cache::remember($cacheKey, now()->addMinutes(10), function () use ($dateFilter) {
-            $count = 0;
-            $exportDirectory = 'exports';
-            $files = Storage::files($exportDirectory);
+    // Cache and return total record count
+    return Cache::remember($cacheKey, now()->addMinutes(10), function () use ($dateFilter) {
+        $count = 0;
+        $exportDirectory = 'exports';
+        $files = Storage::files($exportDirectory);
 
-            foreach ($files as $file) {
-                if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv')
-                    continue;
-
-                $filename = basename($file, '.csv');
-                if (!preg_match('/(\d{8})/', $filename, $matches))
-                    continue;
-
-                $fileDate = $matches[1];
-                if (!$this->shouldIncludeFile($fileDate, $dateFilter))
-                    continue;
-
-                $stream = Storage::readStream($file);
-                if (!$stream)
-                    continue;
-
-                $headerSkipped = false;
-
-                while (($line = fgets($stream)) !== false) {
-                    if (!$headerSkipped) {
-                        $headerSkipped = true;
-                        continue;
-                    }
-
-                    if (trim($line) !== '') {
-                        $count++;
-                    }
-                }
-
-                fclose($stream);
+        foreach ($files as $file) {
+            if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv') {
+                continue;
             }
 
-            return $count;
-        });
-    }
+            $filename = basename($file, '.csv');
+            if (!preg_match('/(\d{8})/', $filename, $matches)) {
+                continue;
+            }
+
+            $fileDate = $matches[1];
+            if (!$this->shouldIncludeFile($fileDate, $dateFilter)) {
+                continue;
+            }
+
+            $stream = Storage::readStream($file);
+            if (!$stream) {
+                continue;
+            }
+
+            $headerSkipped = false;
+
+            while (($line = fgets($stream)) !== false) {
+                if (!$headerSkipped) {
+                    $headerSkipped = true;
+                    continue;
+                }
+
+                if (trim($line) !== '') {
+                    $count++;
+                }
+            }
+
+            fclose($stream);
+        }
+
+        return $count;
+    });
+}
 
 
 
@@ -194,7 +204,7 @@ class MessageController extends Controller
 /**
      * Get available dates from CSV files
      */
-    private function getAvailableDates(): Collection
+    private function getAvailableDates(?string $dateFilter = ''): Collection
     {
         $exportDirectory = 'exports';
         $dates = collect();
@@ -209,9 +219,14 @@ class MessageController extends Controller
             if (pathinfo($file, PATHINFO_EXTENSION) === 'csv') {
                 $filename = basename($file, '.csv');
 
-                // Extract date from filename (assuming format: transactions_YYYYMMDD.csv)
                 if (preg_match('/(\d{8})/', $filename, $matches)) {
                     $dateString = $matches[1];
+
+                    // Apply date filter here
+                    if (!$this->shouldIncludeFile($dateString, $dateFilter)) {
+                        continue;
+                    }
+
                     $recordCount = $this->getRecordCount($file);
 
                     $dates->push([
@@ -227,6 +242,7 @@ class MessageController extends Controller
         // Sort by date descending
         return $dates->sortByDesc('value')->values();
     }
+
 
     /**
      * Get transaction data based on date filter
@@ -363,7 +379,7 @@ class MessageController extends Controller
     /**
      * Export data to CSV
      */
-    private function exportToCsv(Collection $data, string $dateFilter)
+    private function exportToCsv(LazyCollection $data, string $dateFilter)
     {
         $filename = ($dateFilter ?: 'all') . '_' . date('Ymd_His') . '.csv';
 

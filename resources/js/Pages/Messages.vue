@@ -224,7 +224,7 @@ const initializeDataTable = () => {
                 data: 'mobile_number',
                 title: 'Phone Number',
                 render: function (data) {
-                    return formatPhoneNumber(data)
+                    return data
                 }
             }
         ],
