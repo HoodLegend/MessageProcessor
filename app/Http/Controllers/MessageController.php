@@ -39,7 +39,7 @@ class MessageController extends Controller
             $search = $request->input('search.value', '');
             $orderColumn = $request->input('order.0.column', 1);
             $orderDir = $request->input('order.0.dir', 'desc');
-            $dateFilter = $request->input('date_filter', '');
+            $dateFilter = (string) $request->input('date_filter', '');
 
             // Get filtered data
             $allData = $this->getTransactionData($dateFilter);
