@@ -7,7 +7,6 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
-// use Generator;
 use Illuminate\Support\LazyCollection;
 use Inertia\Inertia;
 
@@ -16,10 +15,11 @@ class MessageController extends Controller
     /**
      * Display a list of all CSV files and their data
      */
-        public function index()
+    public function index(Request $request)
     {
-        $availableDates = $this->getAvailableDates();
-        $totalRecords = $this->getTotalRecords();
+        $dateFilter = (string) $request->input('date_filter', '');
+        $availableDates = $this->getAvailableDates($dateFilter);
+        $totalRecords = $this->getCachedTransactionCount($dateFilter);
 
         return Inertia::render('Messages', [
             'availableDates' => $availableDates,
