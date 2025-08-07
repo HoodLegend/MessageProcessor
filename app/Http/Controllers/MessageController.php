@@ -36,41 +36,15 @@ class MessageController extends Controller
             $draw = $request->input('draw', 1);
             $start = $request->input('start', 0);
             $length = $request->input('length', 25);
-            $search = $request->input('search.value', '');
-            $orderColumn = $request->input('order.0.column', 1);
-            $orderDir = $request->input('order.0.dir', 'desc');
             $dateFilter = (string) $request->input('date_filter', '');
 
-            // Get filtered data
-            $allData = $this->getTransactionData($dateFilter);
-
-            // Apply search filter
-            if (!empty($search)) {
-                $allData = $allData->filter(function ($item) use ($search) {
-                    return stripos($item['transaction_id'], $search) !== false ||
-                           stripos($item['mobile_number'], $search) !== false ||
-                           stripos($item['amount'], $search) !== false ||
-                           stripos($item['transaction_date'], $search) !== false;
-                });
-            }
-
-            $totalRecords = $allData->count();
-            $totalFiltered = $totalRecords;
-
-            // Apply sorting
-            $columns = ['transaction_id', 'transaction_date', 'transaction_time', 'amount', 'mobile_number'];
-            if (isset($columns[$orderColumn])) {
-                $sortField = $columns[$orderColumn];
-                $allData = $allData->sortBy($sortField, SORT_REGULAR, $orderDir === 'desc');
-            }
-
-            // Apply pagination
-            $data = $allData->skip($start)->take($length)->values();
+            // Use custom method that streams only a page of data
+            $data = $this->getTransactionPage($dateFilter, $start, $length);
 
             return response()->json([
                 'draw' => intval($draw),
-                'recordsTotal' => $totalRecords,
-                'recordsFiltered' => $totalFiltered,
+                'recordsTotal' => 0, // Optional: replace with real count from cache if needed
+                'recordsFiltered' => 0, // Same as above
                 'data' => $data->toArray()
             ]);
 
@@ -86,6 +60,72 @@ class MessageController extends Controller
             ]);
         }
     }
+
+    private function getTransactionPage(string $dateFilter, int $start, int $length): Collection
+    {
+        $rows = collect();
+        $exportDirectory = 'exports';
+        $files = Storage::files($exportDirectory);
+        $rowCount = 0;
+
+        foreach ($files as $file) {
+            if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv')
+                continue;
+
+            $filename = basename($file, '.csv');
+            if (preg_match('/(\d{8})/', $filename, $matches)) {
+                $fileDate = $matches[1];
+                if (!$this->shouldIncludeFile($fileDate, $dateFilter))
+                    continue;
+
+                $stream = Storage::readStream($file);
+                if (!$stream)
+                    continue;
+
+                $headerSkipped = false;
+
+                while (($line = fgets($stream)) !== false) {
+                    if (!$headerSkipped) {
+                        $headerSkipped = true;
+                        continue;
+                    }
+
+                    if (trim($line) === '')
+                        continue;
+
+                    if ($rowCount < $start) {
+                        $rowCount++;
+                        continue;
+                    }
+
+                    if ($rows->count() >= $length)
+                        break;
+
+                    $columns = str_getcsv($line);
+
+                    if (count($columns) >= 5) {
+                        $rows->push([
+                            'transaction_date' => $columns[0] ?? '',
+                            'transaction_time' => $columns[1] ?? '',
+                            'amount' => $columns[2] ?? '',
+                            'mobile_number' => $columns[3] ?? '',
+                            'transaction_id' => $columns[4] ?? ''
+                        ]);
+                    }
+
+                    $rowCount++;
+                }
+
+                fclose($stream);
+
+                if ($rows->count() >= $length)
+                    break;
+            }
+        }
+
+        return $rows;
+    }
+
 
         /**
      * Export transactions data
