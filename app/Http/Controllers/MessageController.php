@@ -144,37 +144,31 @@ class MessageController extends Controller
     /**
      * Get transaction data based on date filter
      */
-    private function getTransactionData(?string $dateFilter = ''): Collection
+    private function getTransactionData(?string $dateFilter = ''): Generator
     {
-        $allData = collect();
         $exportDirectory = 'exports';
-
         if (!Storage::exists($exportDirectory)) {
-            return $allData;
+            return;
         }
 
         $files = Storage::files($exportDirectory);
-
         foreach ($files as $file) {
             if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv') {
                 continue;
             }
 
             $filename = basename($file, '.csv');
-
-            // Extract date from filename
             if (preg_match('/(\d{8})/', $filename, $matches)) {
                 $fileDateString = $matches[1];
-
-                // Apply date filter
                 if ($this->shouldIncludeFile($fileDateString, $dateFilter)) {
+                    // Yield each row instead of collecting all data
                     $fileData = $this->parseCSVFile($file);
-                    $allData = $allData->merge($fileData);
+                    foreach ($fileData as $row) {
+                        yield $row;
+                    }
                 }
             }
         }
-
-        return $allData;
     }
 
     /**
