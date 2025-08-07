@@ -250,16 +250,39 @@ const initializeDataTable = () => {
     })
 }
 
-const onDateChange = () => {
-    loading.value = true
-    error.value = ''
+// const onDateChange = () => {
+//     loading.value = true
+//     error.value = ''
 
-    // Reload the DataTable with new date filter
-    if (dataTable.value) {
+//     // Reload the DataTable with new date filter
+//     if (dataTable.value) {
+//         dataTable.value.ajax.reload(() => {
+//             loading.value = false
+//         })
+//     }
+// }
+const onDateChange = () => {
+  loading.value = true
+  error.value = ''
+
+  router.get(route('transactions.index'), { date_filter: selectedDate.value }, {
+    preserveState: false, // Force fresh props
+    preserveScroll: true,
+    onSuccess: () => {
+      // Reinitialize or reload DataTable
+      if (dataTable.value) {
         dataTable.value.ajax.reload(() => {
-            loading.value = false
+          loading.value = false
         })
+      } else {
+        loading.value = false
+      }
+    },
+    onError: () => {
+      loading.value = false
+      error.value = 'Failed to load data for selected date'
     }
+  })
 }
 
 const applyQuickFilter = (filterValue) => {
@@ -267,36 +290,12 @@ const applyQuickFilter = (filterValue) => {
     onDateChange()
 }
 
-// const refreshData = () => {
-//     loading.value = true
-//     error.value = ''
-
-//     // Refresh available dates and reload table
-//     router.reload({
-//         onSuccess: () => {
-//             if (dataTable.value) {
-//                 dataTable.value.ajax.reload(() => {
-//                     loading.value = false
-//                 })
-//             } else {
-//                 loading.value = false
-//             }
-//         },
-//         onError: () => {
-//             loading.value = false
-//             error.value = 'Failed to refresh data. Please try again.'
-//         }
-//     })
-// }
-
-// temporary fix
 const refreshData = () => {
     loading.value = true
     error.value = ''
 
+    // Refresh available dates and reload table
     router.reload({
-        only: ['availableDates', 'totalRecords'],
-        data: { date_filter: selectedDate.value },
         onSuccess: () => {
             if (dataTable.value) {
                 dataTable.value.ajax.reload(() => {
@@ -312,7 +311,6 @@ const refreshData = () => {
         }
     })
 }
-
 
 const downloadCurrentData = () => {
     const params = new URLSearchParams({
