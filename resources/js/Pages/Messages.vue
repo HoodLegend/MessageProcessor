@@ -267,12 +267,36 @@ const applyQuickFilter = (filterValue) => {
     onDateChange()
 }
 
+// const refreshData = () => {
+//     loading.value = true
+//     error.value = ''
+
+//     // Refresh available dates and reload table
+//     router.reload({
+//         onSuccess: () => {
+//             if (dataTable.value) {
+//                 dataTable.value.ajax.reload(() => {
+//                     loading.value = false
+//                 })
+//             } else {
+//                 loading.value = false
+//             }
+//         },
+//         onError: () => {
+//             loading.value = false
+//             error.value = 'Failed to refresh data. Please try again.'
+//         }
+//     })
+// }
+
+// temporary fix
 const refreshData = () => {
     loading.value = true
     error.value = ''
 
-    // Refresh available dates and reload table
     router.reload({
+        only: ['availableDates', 'totalRecords'],
+        data: { date_filter: selectedDate.value },
         onSuccess: () => {
             if (dataTable.value) {
                 dataTable.value.ajax.reload(() => {
@@ -288,6 +312,7 @@ const refreshData = () => {
         }
     })
 }
+
 
 const downloadCurrentData = () => {
     const params = new URLSearchParams({
