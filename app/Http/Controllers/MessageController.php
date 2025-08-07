@@ -6,7 +6,8 @@ use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Storage;
-use Generator;
+// use Generator;
+use Illuminate\Support\LazyCollection;
 use Inertia\Inertia;
 
 class MessageController extends Controller
@@ -143,7 +144,7 @@ class MessageController extends Controller
     /**
      * Get transaction data based on date filter
      */
-    private function getTransactionData(?string $dateFilter = ''): Generator
+    private function getTransactionData(?string $dateFilter = ''): LazyCollection
 
     {
         $exportDirectory = 'exports';
