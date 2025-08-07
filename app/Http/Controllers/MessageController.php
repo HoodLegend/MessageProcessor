@@ -2,12 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use App\Services\MessageProcessorService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
+use Generator;
 use Inertia\Inertia;
 
 class MessageController extends Controller
@@ -145,6 +144,7 @@ class MessageController extends Controller
      * Get transaction data based on date filter
      */
     private function getTransactionData(?string $dateFilter = ''): Generator
+
     {
         $exportDirectory = 'exports';
         if (!Storage::exists($exportDirectory)) {
