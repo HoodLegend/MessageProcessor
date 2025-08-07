@@ -250,39 +250,16 @@ const initializeDataTable = () => {
     })
 }
 
-// const onDateChange = () => {
-//     loading.value = true
-//     error.value = ''
-
-//     // Reload the DataTable with new date filter
-//     if (dataTable.value) {
-//         dataTable.value.ajax.reload(() => {
-//             loading.value = false
-//         })
-//     }
-// }
 const onDateChange = () => {
-  loading.value = true
-  error.value = ''
+    loading.value = true
+    error.value = ''
 
-  router.get(route('transactions.index'), { date_filter: selectedDate.value }, {
-    preserveState: false, // Force fresh props
-    preserveScroll: true,
-    onSuccess: () => {
-      // Reinitialize or reload DataTable
-      if (dataTable.value) {
+    // Reload the DataTable with new date filter
+    if (dataTable.value) {
         dataTable.value.ajax.reload(() => {
-          loading.value = false
+            loading.value = false
         })
-      } else {
-        loading.value = false
-      }
-    },
-    onError: () => {
-      loading.value = false
-      error.value = 'Failed to load data for selected date'
     }
-  })
 }
 
 const applyQuickFilter = (filterValue) => {
