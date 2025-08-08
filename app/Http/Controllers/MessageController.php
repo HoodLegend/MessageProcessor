@@ -125,67 +125,123 @@ class MessageController extends Controller
 
         return $rows;
     }
-private function getCachedTransactionCount(string $dateFilter): int
-{
-    $cacheKey = 'transaction_count_' . ($dateFilter ?: 'all');
-    $datesCacheKey = 'available_dates_' . ($dateFilter ?: 'all');
+    // private function getCachedTransactionCount(string $dateFilter): int
+    // {
+    //     $cacheKey = 'transaction_count_' . ($dateFilter ?: 'all');
+    //     $datesCacheKey = 'available_dates_' . ($dateFilter ?: 'all');
 
-    // Cache available dates (only once)
-    Cache::remember($datesCacheKey, now()->addMinutes(10), function () use ($dateFilter) {
-        return $this->getAvailableDates($dateFilter);
-    });
+    //     // Cache available dates (only once)
+    //     Cache::remember($datesCacheKey, now()->addMinutes(10), function () use ($dateFilter) {
+    //         return $this->getAvailableDates($dateFilter);
+    //     });
 
-    // Cache and return total record count
-    return Cache::remember($cacheKey, now()->addMinutes(10), function () use ($dateFilter) {
-        $count = 0;
-        $exportDirectory = 'exports';
-        $files = Storage::files($exportDirectory);
+    //     // Cache and return total record count
+    //     return Cache::remember($cacheKey, now()->addMinutes(10), function () use ($dateFilter) {
+    //         $count = 0;
+    //         $exportDirectory = 'exports';
+    //         $files = Storage::files($exportDirectory);
 
-        foreach ($files as $file) {
-            if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv') {
-                continue;
-            }
+    //         foreach ($files as $file) {
+    //             if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv') {
+    //                 continue;
+    //             }
 
-            $filename = basename($file, '.csv');
-            if (!preg_match('/(\d{8})/', $filename, $matches)) {
-                continue;
-            }
+    //             $filename = basename($file, '.csv');
+    //             if (!preg_match('/(\d{8})/', $filename, $matches)) {
+    //                 continue;
+    //             }
 
-            $fileDate = $matches[1];
-            if (!$this->shouldIncludeFile($fileDate, $dateFilter)) {
-                continue;
-            }
+    //             $fileDate = $matches[1];
+    //             if (!$this->shouldIncludeFile($fileDate, $dateFilter)) {
+    //                 continue;
+    //             }
 
-            $stream = Storage::readStream($file);
-            if (!$stream) {
-                continue;
-            }
+    //             $stream = Storage::readStream($file);
+    //             if (!$stream) {
+    //                 continue;
+    //             }
 
-            $headerSkipped = false;
+    //             $headerSkipped = false;
 
-            while (($line = fgets($stream)) !== false) {
-                if (!$headerSkipped) {
-                    $headerSkipped = true;
-                    continue;
-                }
+    //             while (($line = fgets($stream)) !== false) {
+    //                 if (!$headerSkipped) {
+    //                     $headerSkipped = true;
+    //                     continue;
+    //                 }
 
-                if (trim($line) !== '') {
-                    $count++;
-                }
-            }
+    //                 if (trim($line) !== '') {
+    //                     $count++;
+    //                 }
+    //             }
 
-            fclose($stream);
-        }
+    //             fclose($stream);
+    //         }
 
-        return $count;
-    });
-}
+    //         return $count;
+    //     });
+    // }
 
 
 
     /**
      * Export transactions data
      */
+
+    private function getCachedTransactionCount(string $dateFilter): int
+    {
+        $cacheKey = 'transaction_count_' . ($dateFilter ?: 'all');
+        $datesCacheKey = 'available_dates_' . ($dateFilter ?: 'all');
+
+        // Use cache() helper instead of Cache facade to avoid resolution issues
+        cache()->remember($datesCacheKey, now()->addMinutes(10), function () use ($dateFilter) {
+            return $this->getAvailableDates($dateFilter);
+        });
+
+        return cache()->remember($cacheKey, now()->addMinutes(10), function () use ($dateFilter) {
+            $count = 0;
+            $exportDirectory = 'exports';
+            $files = Storage::files($exportDirectory);
+
+            foreach ($files as $file) {
+                if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv') {
+                    continue;
+                }
+
+                $filename = basename($file, '.csv');
+                if (!preg_match('/(\d{8})/', $filename, $matches)) {
+                    continue;
+                }
+
+                $fileDate = $matches[1];
+                if (!$this->shouldIncludeFile($fileDate, $dateFilter)) {
+                    continue;
+                }
+
+                $stream = Storage::readStream($file);
+                if (!$stream) {
+                    continue;
+                }
+
+                $headerSkipped = false;
+
+                while (($line = fgets($stream)) !== false) {
+                    if (!$headerSkipped) {
+                        $headerSkipped = true;
+                        continue;
+                    }
+
+                    if (trim($line) !== '') {
+                        $count++;
+                    }
+                }
+
+                fclose($stream);
+            }
+
+            return $count;
+        });
+    }
+
     public function export(Request $request)
     {
         $dateFilter = $request->input('date_filter', '');
