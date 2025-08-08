@@ -244,7 +244,7 @@ class MessageController extends Controller
 
     public function export(Request $request)
     {
-        $dateFilter = $request->input('date_filter', '');
+        $dateFilter = (string) $request->input('date_filter', '');
         $format = $request->input('format', 'csv');
 
         $data = $this->getTransactionData($dateFilter);
@@ -436,7 +436,7 @@ class MessageController extends Controller
      */
     private function exportToCsv(LazyCollection $data, string $dateFilter)
     {
-        $filename = ($dateFilter ?: 'all') . '_' . date('Ymd_His') . '.csv';
+        $filename = ($dateFilter ?: 'all') . '.csv';
 
         $headers = [
             'Content-Type' => 'text/csv',

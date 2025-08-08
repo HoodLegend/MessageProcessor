@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 
 class ParseDatFilesCommand extends Command
 {
@@ -401,6 +402,8 @@ class ParseDatFilesCommand extends Command
 
         $totalFiles = 0;
         $totalRecords = 0;
+        $successfulSends = 0;
+        $failedSends = 0;
 
         foreach ($groupedByDate as $date => $dateRecords) {
             try {
@@ -475,37 +478,291 @@ class ParseDatFilesCommand extends Command
 
                 $csvString = rtrim($csvString, "\n");
 
-                // Save the file
+                // Save the file locally
                 if (Storage::put($filePath, $csvString)) {
                     $totalFiles++;
                     $totalRecords += $dateRecords->count();
                     $this->info("  ✓ Saved: storage/app/{$filePath} ({$dateRecords->count()} records)");
+
+                    // Send to accounting software immediately after successful save
+                    $sendResult = $this->sendToAccountingSoftware($csvString, $filename, $dateRecords);
+
+                    if ($sendResult['success']) {
+                        $successfulSends++;
+                        $this->info("  ✓ Successfully sent to accounting software");
+                    } else {
+                        $failedSends++;
+                        $this->error("  ✗ Failed to send to accounting software: " . $sendResult['error']);
+                    }
+
                 } else {
                     $this->error("  ✗ Failed to save: {$filename}");
                 }
 
             } catch (\Exception $e) {
                 $this->error("  ✗ Error saving data for date {$date}: " . $e->getMessage());
+                $failedSends++;
             }
         }
 
         // Summary
-        $this->info("\n" . str_repeat('=', 50));
-        $this->info("EXPORT SUMMARY");
-        $this->info(str_repeat('=', 50));
+        $this->info("\n" . str_repeat('=', 60));
+        $this->info("EXPORT & TRANSMISSION SUMMARY");
+        $this->info(str_repeat('=', 60));
         $this->info("Total CSV files created: {$totalFiles}");
         $this->info("Total records exported: {$totalRecords}");
+        $this->info("Successfully sent to accounting: {$successfulSends}");
+        $this->info("Failed transmissions: {$failedSends}");
         $this->info("Files saved in: storage/app/{$directory}/");
+        $this->info("Transmission logs saved in: storage/app/transmission_logs/");
 
         // List all created files
         if ($totalFiles > 0) {
             $this->info("\nCreated files:");
             foreach ($groupedByDate->keys() as $date) {
                 $filename = $this->createFilenameFromDate($date);
-                $this->line("  - {$filename}");
+                $logFilename = "transmission_log_{$date}.log";
+                $this->line("  - CSV: {$filename}");
+                $this->line("    Log: {$logFilename}");
             }
         }
+
+        // Show transmission log summary
+        if ($successfulSends > 0 || $failedSends > 0) {
+            $this->info("\nTransmission log files contain:");
+            $this->line("  - Detailed transmission attempts with timestamps");
+            $this->line("  - Complete CSV content that was sent");
+            $this->line("  - Success/failure status with error details");
+            $this->line("  - Response data from accounting software");
+            $this->line("  - HTTP status codes and response headers");
+        }
     }
+
+    /**
+ * Send CSV data to accounting software
+ */
+private function sendToAccountingSoftware(string $csvContent, string $filename, Collection $records): array
+{
+    $transmissionTime = now();
+    $transactionDate = $records->first()['transaction_date'] ?? $transmissionTime->format('Y-m-d');
+
+    try {
+        $accountingUrl = config('accounting.endpoint_url', 'https://www.example.com/send');
+
+        // Prepare the data payload
+        $payload = [
+            'filename' => $filename,
+            'date' => $transactionDate,
+            'record_count' => $records->count(),
+            'csv_data' => $csvContent,
+            'metadata' => [
+                'source' => 'transaction_processor',
+                'generated_at' => $transmissionTime->toISOString(),
+                'total_amount' => $records->sum('amount') ?? 0,
+            ]
+        ];
+
+        $this->line("  → Sending {$records->count()} records to accounting software...");
+
+        // Send HTTP request with timeout and retry logic
+        $response = Http::timeout(30)
+            ->retry(3, 1000) // Retry 3 times with 1 second delay
+            ->post($accountingUrl, $payload);
+
+        if ($response->successful()) {
+            $responseData = $response->json();
+
+            // Create detailed log entry for success
+            $logEntry = $this->createLogEntry([
+                'status' => 'SUCCESS',
+                'filename' => $filename,
+                'transaction_date' => $transactionDate,
+                'transmission_time' => $transmissionTime,
+                'record_count' => $records->count(),
+                'total_amount' => $records->sum('amount') ?? 0,
+                'endpoint_url' => $accountingUrl,
+                'csv_content' => $csvContent,
+                'response_data' => $responseData,
+                'response_status' => $response->status(),
+                'response_headers' => $response->headers(),
+            ]);
+
+            // Save to date-specific log file
+            $this->saveTransmissionLog($transactionDate, $logEntry);
+
+            // Laravel log
+            \Log::info("Successfully sent CSV to accounting software", [
+                'filename' => $filename,
+                'records' => $records->count(),
+                'response' => $responseData
+            ]);
+
+            return [
+                'success' => true,
+                'response' => $responseData
+            ];
+        } else {
+            $errorMessage = "HTTP {$response->status()}: " . $response->body();
+
+            // Create detailed log entry for failure
+            $logEntry = $this->createLogEntry([
+                'status' => 'FAILED',
+                'filename' => $filename,
+                'transaction_date' => $transactionDate,
+                'transmission_time' => $transmissionTime,
+                'record_count' => $records->count(),
+                'total_amount' => $records->sum('amount') ?? 0,
+                'endpoint_url' => $accountingUrl,
+                'csv_content' => $csvContent,
+                'error_message' => $errorMessage,
+                'response_status' => $response->status(),
+                'response_body' => $response->body(),
+                'response_headers' => $response->headers(),
+            ]);
+
+            $this->saveTransmissionLog($transactionDate, $logEntry);
+
+            \Log::error("Failed to send CSV to accounting software", [
+                'filename' => $filename,
+                'error' => $errorMessage,
+                'status' => $response->status()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => $errorMessage
+            ];
+        }
+
+    } catch (\Exception $e) {
+        $errorMessage = $e->getMessage();
+
+        // Create detailed log entry for exception
+        $logEntry = $this->createLogEntry([
+            'status' => 'ERROR',
+            'filename' => $filename,
+            'transaction_date' => $transactionDate,
+            'transmission_time' => $transmissionTime,
+            'record_count' => $records->count(),
+            'total_amount' => $records->sum('amount') ?? 0,
+            'endpoint_url' => $accountingUrl ?? 'N/A',
+            'csv_content' => $csvContent,
+            'error_message' => $errorMessage,
+            'exception_trace' => $e->getTraceAsString(),
+        ]);
+
+        $this->saveTransmissionLog($transactionDate, $logEntry);
+
+        \Log::error("Exception when sending CSV to accounting software", [
+            'filename' => $filename,
+            'error' => $errorMessage,
+            'trace' => $e->getTraceAsString()
+        ]);
+
+        return [
+            'success' => false,
+            'error' => $errorMessage
+        ];
+    }
+}
+
+/**
+ * Create a detailed log entry for transmission attempts
+ */
+private function createLogEntry(array $data): string
+{
+    $separator = str_repeat('=', 80);
+    $timestamp = $data['transmission_time']->format('Y-m-d H:i:s T');
+
+    $logContent = "\n{$separator}\n";
+    $logContent .= "TRANSMISSION LOG ENTRY\n";
+    $logContent .= "{$separator}\n";
+    $logContent .= "Status: {$data['status']}\n";
+    $logContent .= "Timestamp: {$timestamp}\n";
+    $logContent .= "Filename: {$data['filename']}\n";
+    $logContent .= "Transaction Date: {$data['transaction_date']}\n";
+    $logContent .= "Record Count: {$data['record_count']}\n";
+    $logContent .= "Total Amount: " . number_format($data['total_amount'], 2) . "\n";
+    $logContent .= "Endpoint URL: {$data['endpoint_url']}\n";
+
+    // Add response information for successful transmissions
+    if ($data['status'] === 'SUCCESS') {
+        $logContent .= "Response Status: {$data['response_status']}\n";
+        $logContent .= "Response Data: " . json_encode($data['response_data'], JSON_PRETTY_PRINT) . "\n";
+        if (!empty($data['response_headers'])) {
+            $logContent .= "Response Headers: " . json_encode($data['response_headers'], JSON_PRETTY_PRINT) . "\n";
+        }
+    }
+
+    // Add error information for failed transmissions
+    if (isset($data['error_message'])) {
+        $logContent .= "Error Message: {$data['error_message']}\n";
+        if (isset($data['response_status'])) {
+            $logContent .= "HTTP Status: {$data['response_status']}\n";
+        }
+        if (isset($data['response_body'])) {
+            $logContent .= "Response Body: {$data['response_body']}\n";
+        }
+        if (isset($data['exception_trace'])) {
+            $logContent .= "Stack Trace:\n{$data['exception_trace']}\n";
+        }
+    }
+
+    $logContent .= "\nCSV CONTENT:\n";
+    $logContent .= str_repeat('-', 40) . "\n";
+    $logContent .= $data['csv_content'] . "\n";
+    $logContent .= str_repeat('-', 40) . "\n";
+
+    $logContent .= "{$separator}\n\n";
+
+    return $logContent;
+}
+
+/**
+ * Save transmission log to date-specific file
+ */
+private function saveTransmissionLog(string $transactionDate, string $logEntry): void
+{
+    try {
+        $logDirectory = 'transmission_to_server_logs';
+
+        // Create directory if it doesn't exist
+        if (!Storage::exists($logDirectory)) {
+            Storage::makeDirectory($logDirectory);
+        }
+
+        // Create filename based on transaction date
+        $logFilename = "transmission_log_{$transactionDate}.log";
+        $logFilePath = "{$logDirectory}/{$logFilename}";
+
+        // Append to existing log file or create new one
+        if (Storage::exists($logFilePath)) {
+            $existingContent = Storage::get($logFilePath);
+            $newContent = $existingContent . $logEntry;
+        } else {
+            // Create header for new log file
+            $header = "ACCOUNTING SOFTWARE TRANSMISSION LOG\n";
+            $header .= "Generated: " . now()->format('Y-m-d H:i:s T') . "\n";
+            $header .= "Transaction Date: {$transactionDate}\n";
+            $header .= str_repeat('=', 80) . "\n\n";
+
+            $newContent = $header . $logEntry;
+        }
+
+        Storage::put($logFilePath, $newContent);
+
+        $this->line("  → Log saved to: storage/app/{$logFilePath}");
+
+    } catch (\Exception $e) {
+        $this->error("  ✗ Failed to save transmission log: " . $e->getMessage());
+        \Log::error("Failed to save transmission log", [
+            'transaction_date' => $transactionDate,
+            'error' => $e->getMessage()
+        ]);
+    }
+}
+
+
 
     /**
      * Create a filename from a date string
@@ -540,6 +797,4 @@ class ParseDatFilesCommand extends Command
             return "{$timestamp}.csv";
         }
     }
-
-
 }

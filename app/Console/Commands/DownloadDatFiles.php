@@ -82,7 +82,7 @@ class DownloadDatFiles extends Command
 
                 // Check if file already exists in storage
                 if (Storage::exists($destinationPath)) {
-                    $this->line("⚠ Skipped (already exists): {$fileName}");
+                    $this->line("Skipped (already exists): {$fileName}");
                     $processedCount++;
                     continue;
                 }
@@ -92,14 +92,14 @@ class DownloadDatFiles extends Command
 
                 // Validate file content (basic check)
                 if (empty($fileContent)) {
-                    $this->warn("⚠ Skipped (empty file): {$fileName}");
+                    $this->warn("Skipped (empty file): {$fileName}");
                     continue;
                 }
 
                 // Store in Laravel storage
                 if (Storage::put($destinationPath, $fileContent)) {
                     $successCount++;
-                    $this->line("✓ Processed: {$fileName}");
+                    $this->line("Processed: {$fileName}");
 
                     // Remove original file if not in copy mode
                     if (!$copyMode) {
