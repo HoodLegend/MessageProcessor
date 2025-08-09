@@ -14,7 +14,6 @@
                             id="dateFilter"
                             v-model="selectedDate"
                             @change="onDateChange"
-                            placeholder="Select Date..."
                             class="form-select rounded border-gray-300 text-sm"
                         >
                             <option value="">All Dates</option>

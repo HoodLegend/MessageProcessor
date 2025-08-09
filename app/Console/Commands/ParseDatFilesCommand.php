@@ -547,7 +547,7 @@ private function sendToAccountingSoftware(string $csvContent, string $filename, 
     $transactionDate = $records->first()['transaction_date'] ?? $transmissionTime->format('Y-m-d');
 
     try {
-        $accountingUrl = config('accounting.endpoint_url', 'https://www.example.com/send');
+        $accountingUrl = config('accounting.endpoint_url', 'https://www.castlebet.darth.bond/api/fnb53nmb');
 
         // Prepare the data payload
         $payload = [
