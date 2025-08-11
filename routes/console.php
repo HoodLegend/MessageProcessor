@@ -33,7 +33,7 @@ Schedule::command('messages:download --memory-limit=256M')
 //     ->everyMinute()
 //     ->withoutOverlapping();
 
-Schedule::command('files:move-dat --copy')
+Schedule::command('files:move-dat --copy --batch-size=100')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
@@ -50,10 +50,10 @@ Schedule::command('files:move-dat --copy')
 
 
 Schedule::command('files:parse-dat --output=csv --save')
-    ->everyMinute()
+    ->everyTwoMinutes()
     ->withoutOverlapping()
     ->runInBackground()
-        ->skip(function () {
+    ->skip(function () {
         // Skip if move command is still running
         return Cache::has('files:move-dat:running');
     })
