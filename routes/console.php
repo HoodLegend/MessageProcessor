@@ -40,6 +40,8 @@ Schedule::command('files:move-dat --copy')
     ->appendOutputTo(storage_path("logs/data_from_DATfile_logs"))
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
+        \Log::info('files:move-dat START at ' . now());
+        \Log::info('files:move-dat END at ' . now());
     })
     ->onFailure(function () {
         \Log::error('Scheduled message processing failed');
@@ -51,8 +53,14 @@ Schedule::command('files:parse-dat --output=csv --save')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
+        ->skip(function () {
+        // Skip if move command is still running
+        return Cache::has('files:move-dat:running');
+    })
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
+        \Log::info('files:parse-dat START at ' . now());
+        \Log::info('files:parse-dat END at ' . now());
     })
     ->onFailure(function () {
         \Log::error('Scheduled message processing failed');
