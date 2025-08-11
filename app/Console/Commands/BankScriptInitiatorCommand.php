@@ -17,8 +17,7 @@ class BankScriptInitiatorCommand extends Command
     protected $signature = 'messages:download
                            {--timeout=300 : Maximum execution time in seconds}
                            {--memory-limit=128M : Memory limit for the process}
-                           {--force : Force execution even if another instance is running}
-                           {--verbose : Show detailed output}';
+                           {--force : Force execution even if another instance is running}';
 
     /**
      * The console command description.
