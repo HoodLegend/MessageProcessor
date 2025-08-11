@@ -8,17 +8,30 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 
-Schedule::command('messages:cleanup')->weekly()
-    ->withoutOverlapping()
+// Schedule::command('messages:cleanup')->weekly()
+//     ->withoutOverlapping()
+//     ->onSuccess(function () {
+//         \Log::info('Message cleanup completed successfully');
+//     })->onFailure(function () {
+//         \Log::error('Message cleanup failed');
+//     });
+
+Schedule::command('messages:download --memory-limit=256M')
+    ->everyThirtyMinutes()
+    ->withoutOverlapping(1800) // 30-minute overlap protection
+    ->runInBackground()
+    // ->sendOutputTo(storage_path('logs/message_downloads.log'))
+    // ->emailOutputOnFailure(['admin@example.com']) // Optional: email on failure
     ->onSuccess(function () {
-        \Log::info('Message cleanup completed successfully');
-    })->onFailure(function () {
-        \Log::error('Message cleanup failed');
+        \Log::info('Message download completed successfully');
+    })
+    ->onFailure(function () {
+        \Log::error('Message download failed');
     });
 
-Schedule::command('device:whitelist {ip}')
-    ->everyMinute()
-    ->withoutOverlapping();
+// Schedule::command('device:whitelist {ip}')
+//     ->everyMinute()
+//     ->withoutOverlapping();
 
 Schedule::command('files:move-dat --copy')
     ->everyMinute()
@@ -38,7 +51,6 @@ Schedule::command('files:parse-dat --output=csv --save')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
-    ->appendOutputTo(storage_path("logs/parsed_data_from_DatFile_logs"))
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
     })

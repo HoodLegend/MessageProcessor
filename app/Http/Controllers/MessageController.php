@@ -439,7 +439,7 @@ class MessageController extends Controller
         $filename = ($dateFilter ?: 'all') . '.csv';
 
         $headers = [
-            'Content-Type' => 'text/csv',
+            'Content-Type' => 'application/csv',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ];
 
