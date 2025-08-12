@@ -340,13 +340,19 @@ class ParseDatFilesCommand extends Command
     }
 
     /**
-     * Save results to a CSV file in storage/app/exports/ and sends the data to the server.
+     * Save results to a CSV file in storage/app/exports/
      */
     private function saveResults(Collection $results): void
     {
         $directory = 'exports';
-        if (!Storage::exists($directory)) {
-            Storage::makeDirectory($directory);
+        $pendingDirectory = 'exports/pending_transmission';
+        $queueDirectory = 'transmission_queue';
+
+        // Ensure directories exist
+        foreach ([$directory, $pendingDirectory, $queueDirectory] as $dir) {
+            if (!Storage::exists($dir)) {
+                Storage::makeDirectory($dir);
+            }
         }
 
         $groupedByDate = $results->groupBy('transaction_date');
@@ -357,13 +363,14 @@ class ParseDatFilesCommand extends Command
 
         $totalFiles = 0;
         $totalRecords = 0;
-        $successfulSends = 0;
-        $errors = [];
+        $queuedFiles = 0;
+        $errors = 0;
 
         foreach ($groupedByDate as $date => $dateRecords) {
             try {
                 $filename = $this->createFilenameFromDate($date);
                 $filePath = "{$directory}/{$filename}";
+                $pendingPath = "{$pendingDirectory}/{$filename}";
 
                 // Prepare CSV data
                 $csvData = [];
@@ -391,29 +398,22 @@ class ParseDatFilesCommand extends Command
 
                 $csvString = $this->arrayToCsv($csvData);
 
-                if (Storage::put($filePath, $csvString)) {
+                if (Storage::put($filePath, $csvString) && Storage::put($pendingPath, $csvString)) {
                     $totalFiles++;
                     $totalRecords += $dateRecords->count();
-
-                    $sendResult = $this->sendToAccountingSoftware($csvString, $filename, $dateRecords);
-                    if ($sendResult['success']) {
-                        $successfulSends++;
-                    }
+                    $this->queueForTransmission($filename, $date, $dateRecords->count());
+                    $queuedFiles++;
                 }
 
             } catch (\Exception $e) {
-                $errors[] = "Error processing {$date}: " . $e->getMessage();
+                $errors++;
+                \Log::error("Save error for date {$date}: " . $e->getMessage());
             }
         }
 
         // Single line summary for production
-        $this->info("Processed: {$totalFiles} files, {$totalRecords} records, {$successfulSends} sent successfully" .
-            (count($errors) > 0 ? ", " . count($errors) . " errors" : ""));
-
-        // Log errors to Laravel log instead of console
-        foreach ($errors as $error) {
-            \Log::error("DAT parsing error: " . $error);
-        }
+        $this->info("Saved: {$totalFiles} files, {$totalRecords} records, {$queuedFiles} queued" .
+            ($errors > 0 ? ", {$errors} errors" : ""));
     }
 
     /**
@@ -649,7 +649,6 @@ class ParseDatFilesCommand extends Command
             ]);
         }
     }
-
 
 
 

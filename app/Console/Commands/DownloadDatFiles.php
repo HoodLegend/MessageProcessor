@@ -30,7 +30,7 @@ class DownloadDatFiles extends Command
         // Updated source path to messages folder
     $sourcePath = '/var/www/fnb/nam/ReceiptItClient/messages/';
     $copyMode = $this->option('copy');
-    $batchSize = $this->option('batch-size', 100); // Process files in batches
+    $batchSize = $this->option('batch-size'); // Process files in batches
 
     // Check if source directory exists
     if (!File::exists($sourcePath)) {
