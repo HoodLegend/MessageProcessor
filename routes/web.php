@@ -31,16 +31,10 @@ Route::middleware('auth')->group(function () {
     Route::get('/transactions/download/{filename}', [MessageController::class, 'downloadCsv'])->name('transactions.download');
 });
 
-// Route::get('/messages', [MessageController::class, 'index'])->name('messages.index');
-// Route::get('/upload-file', [MessageController::class, "uploadForm"])->name('messages.upload');
+Route::get('/csrf-token', function () {
+    return response()->json(['csrf_token' => csrf_token()]);
+});
 
-// Route::group( [], function () {
-//     Route::post('/upload', [MessageController::class, 'upload'])->name("message.upload");
-//     Route::post('/process-path', [MessageController::class, 'processFromPath'])->name('messages.store');
-//     Route::get('/stats', [MessageController::class, 'getStats'])->name("transaction.status");
-//     Route::get('/messages/{id}', [MessageController::class, 'show'])->name('messages.show');
-//     Route::post('/cleanup', [MessageController::class, 'cleanup']);
-// });
 
 Route::middleware(['auth', 'verified'])->group(function () {
     // Main transactions page

@@ -156,6 +156,15 @@ const quickFilters = computed(() => {
     ]
 })
 
+const getCsrfToken = () => {
+    const token = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    if (!token) {
+        console.warn('CSRF token not found. Page may need refresh.');
+        return '';
+    }
+    return token;
+}
+
 const initializeDataTable = () => {
     if (dataTable.value) {
         dataTable.value.destroy()
@@ -164,20 +173,18 @@ const initializeDataTable = () => {
     dataTable.value = $('#transactionsTable').DataTable({
         processing: true,
         serverSide: true,
+        beforeSend: function (xhr) {
+            const token = getCsrfToken();
+            xhr.setRequestHeader('X-CSRF-TOKEN', token);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        },
         ajax: {
             url: route('transactions.data'),
             type: 'POST',
             data: function(d) {
                 // Add custom filters to the request
                 d.date_filter = selectedDate.value
-                d._token = document.querySelector('meta[name="csrf-token"]').getAttribute('content')
-                // const tokenMeta = document.querySelector('meta[name="csrf-token"]')
-                // if (tokenMeta) {
-                //     d._token = tokenMeta.getAttribute('content')
-                // } else {
-                //     console.warn('CSRF token meta tag not found')
-                // }
-
+                d._token = getCsrfToken();
                 return d
             },
             dataSrc: function(json) {
@@ -187,9 +194,23 @@ const initializeDataTable = () => {
                 hasRecords.value = json.data.length > 0
                 return json.data
             },
-            error: function(xhr, error, thrown) {
-                console.error('DataTable AJAX error:', error)
-                error.value = 'Failed to load transaction data. Please try again.'
+            error: function (xhr, error, thrown) {
+                // console.error('DataTable AJAX error:', error)
+                // error.value = 'Failed to load transaction data. Please try again.'
+                console.error('DataTable AJAX error:', {
+                    status: xhr.status,
+                    error: error,
+                    thrown: thrown,
+                    response: xhr.responseText
+                });
+
+                if (xhr.status === 419) {
+                    error.value = 'Session expired. Refreshing page...';
+                    // Force page refresh to get new CSRF token
+                    setTimeout(() => window.location.reload(), 2000);
+                } else {
+                    error.value = `Error ${xhr.status}: Failed to load data. Please try again.`;
+                }
             }
         },
         columns: [
