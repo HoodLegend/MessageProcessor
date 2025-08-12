@@ -448,4 +448,43 @@ class SendDataToServerCommand extends Command
             }
         }
     }
+
+    /**
+     * Output comprehensive summary
+     */
+    private function outputSummary(array $stats, int $runtime): void
+    {
+        $this->info("\n" . str_repeat('=', 60));
+        $this->info("TRANSMISSION SUMMARY");
+        $this->info(str_repeat('=', 60));
+        $this->info("Runtime: {$runtime}s");
+        $this->info("Files sent successfully: {$stats['files_sent']}");
+        $this->info("Files failed: {$stats['files_failed']}");
+        $this->info("Total HTTP requests: {$stats['total_requests']}");
+        $this->info("Retry attempts: {$stats['retry_attempts']}");
+        $this->info("Total records transmitted: {$stats['total_records']}");
+
+        if (!empty($stats['errors'])) {
+            $errorCount = count($stats['errors']);
+            $this->error("\nErrors encountered ({$errorCount}):");
+            foreach (array_slice($stats['errors'], 0, 5) as $error) {
+                $this->error("  • " . $error);
+            }
+            if ($errorCount > 5) {
+                $this->error("  ... and " . ($errorCount - 5) . " more errors (check logs)");
+            }
+        }
+
+        // Show pending queue status
+        $pendingCount = count(Storage::files('transmission_queue/*.pending'));
+        $failedCount = count(Storage::files('transmission_queue/*.failed'));
+
+        if ($pendingCount > 0 || $failedCount > 0) {
+            $this->info("\nQueue Status:");
+            $this->info("  Pending: {$pendingCount} files");
+            $this->info("  Failed: {$failedCount} files");
+        }
+    }
+
+
 }
