@@ -417,6 +417,25 @@ class ParseDatFilesCommand extends Command
     }
 
     /**
+ * Queue a file for transmission to accounting software
+ */
+private function queueForTransmission(string $filename, string $date, int $recordCount): void
+{
+    $queueFile = "transmission_queue/{$filename}.pending";
+
+    $queueData = [
+        'queued_at' => now()->toISOString(),
+        'filename' => $filename,
+        'transaction_date' => $date,
+        'record_count' => $recordCount,
+        'status' => 'pending',
+        'priority' => 'normal'
+    ];
+
+    Storage::put($queueFile, json_encode($queueData));
+}
+
+    /**
      * Convert array to CSV string efficiently without verbose logging
      */
     private function arrayToCsv(array $data): string
