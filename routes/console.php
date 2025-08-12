@@ -59,10 +59,10 @@ Schedule::command('files:parse-dat --output=csv --save')
         // \Log::info('Scheduled message processing completed successfully');
         // \Log::info('files:parse-dat START at ' . now());
         // \Log::info('files:parse-dat END at ' . now());
-        Log::channel('parse')->info("success", ['message' => 'scheduled message processing completed successfully']);
+        Log::channel('single')->info("success", ['message' => 'scheduled message processing completed successfully']);
     })
     ->onFailure(function () {
-        Log::channel('parse')->info("error", ['message' => 'Scheduled message processing failed']);
+        Log::channel('single')->info("error", ['message' => 'Scheduled message processing failed']);
     });
 
 // Schedule::command('files:send-to-accounting --batch-size=15 --max-runtime=90')
