@@ -18,6 +18,9 @@ class ParseDatFilesCommand extends Command
         {--output=table : Output format (table, json, csv)}
         {--save : Save results to CSV file in storage}';
 
+    private const BATCH_SIZE = 100; // Adjust based on your server capacity
+    private const DELAY_BETWEEN_BATCHES = 2;
+
     /**
      * The console command description.
      *
@@ -342,6 +345,80 @@ class ParseDatFilesCommand extends Command
     /**
      * Save results to a CSV file in storage/app/exports/ and sends the data to the server.
      */
+    // private function saveResults(Collection $results): void
+    // {
+    //     $directory = 'exports';
+    //     if (!Storage::exists($directory)) {
+    //         Storage::makeDirectory($directory);
+    //     }
+
+    //     $groupedByDate = $results->groupBy('transaction_date');
+
+    //     if ($groupedByDate->isEmpty()) {
+    //         return;
+    //     }
+
+    //     $totalFiles = 0;
+    //     $totalRecords = 0;
+    //     $successfulSends = 0;
+    //     $errors = [];
+
+    //     foreach ($groupedByDate as $date => $dateRecords) {
+    //         try {
+    //             $filename = $this->createFilenameFromDate($date);
+    //             $filePath = "{$directory}/{$filename}";
+
+    //             // Prepare CSV data
+    //             $csvData = [];
+    //             if (Storage::exists($filePath)) {
+    //                 $existingContent = Storage::get($filePath);
+    //                 $existingLines = explode("\n", trim($existingContent));
+    //                 if (!empty($existingLines) && strpos($existingLines[0], 'Transaction Date') !== false) {
+    //                     array_shift($existingLines);
+    //                 }
+    //                 $csvData = array_filter(array_map('str_getcsv', $existingLines));
+    //             } else {
+    //                 $csvData[] = ['Transaction Date', 'Transaction Time', 'Amount', 'Mobile Number', 'Transaction ID'];
+    //             }
+
+    //             // Add records
+    //             foreach ($dateRecords as $record) {
+    //                 $csvData[] = [
+    //                     $record['transaction_date'] ?? 'N/A',
+    //                     $record['transaction_time'] ?? 'N/A',
+    //                     $record['amount'] ?? 'N/A',
+    //                     $record['mobile_number'] ?? 'N/A',
+    //                     $record['transaction_id'] ?? 'N/A'
+    //                 ];
+    //             }
+
+    //             $csvString = $this->arrayToCsv($csvData);
+
+    //             if (Storage::put($filePath, $csvString)) {
+    //                 $totalFiles++;
+    //                 $totalRecords += $dateRecords->count();
+
+    //                 $sendResult = $this->sendToAccountingSoftware($csvString, $filename, $dateRecords);
+    //                 if ($sendResult['success']) {
+    //                     $successfulSends++;
+    //                 }
+    //             }
+
+    //         } catch (\Exception $e) {
+    //             $errors[] = "Error processing {$date}: " . $e->getMessage();
+    //         }
+    //     }
+
+    //     // Single line summary for production
+    //     $this->info("Processed: {$totalFiles} files, {$totalRecords} records, {$successfulSends} sent successfully" .
+    //         (count($errors) > 0 ? ", " . count($errors) . " errors" : ""));
+
+    //     // Log errors to Laravel log instead of console
+    //     foreach ($errors as $error) {
+    //         \Log::error("DAT parsing error: " . $error);
+    //     }
+    // }
+
     private function saveResults(Collection $results): void
     {
         $directory = 'exports';
@@ -350,67 +427,141 @@ class ParseDatFilesCommand extends Command
         }
 
         $groupedByDate = $results->groupBy('transaction_date');
-
         if ($groupedByDate->isEmpty()) {
             return;
         }
 
+        // Prepare all batches first
+        $batches = $this->prepareBatches($groupedByDate);
+
+        // Process batches with delay
+        $this->processBatchesWithDelay($batches, $directory);
+    }
+
+    private function prepareBatches(Collection $groupedByDate): array
+    {
+        $batches = [];
+        $currentBatch = [];
+        $currentBatchSize = 0;
+
+        foreach ($groupedByDate as $date => $dateRecords) {
+            // If adding this date would exceed batch size, save current batch
+            if ($currentBatchSize + $dateRecords->count() > self::BATCH_SIZE && !empty($currentBatch)) {
+                $batches[] = $currentBatch;
+                $currentBatch = [];
+                $currentBatchSize = 0;
+            }
+
+            $currentBatch[$date] = $dateRecords;
+            $currentBatchSize += $dateRecords->count();
+        }
+
+        // Add remaining batch
+        if (!empty($currentBatch)) {
+            $batches[] = $currentBatch;
+        }
+
+        return $batches;
+    }
+
+    private function processBatchesWithDelay(array $batches, string $directory): void
+    {
         $totalFiles = 0;
         $totalRecords = 0;
         $successfulSends = 0;
         $errors = [];
 
-        foreach ($groupedByDate as $date => $dateRecords) {
+        $this->info("Processing " . count($batches) . " batches...");
+
+        foreach ($batches as $batchIndex => $batch) {
+            $this->info("Processing batch " . ($batchIndex + 1) . "/" . count($batches));
+
+            $batchResults = $this->processBatch($batch, $directory);
+
+            $totalFiles += $batchResults['files'];
+            $totalRecords += $batchResults['records'];
+            $successfulSends += $batchResults['successful_sends'];
+            $errors = array_merge($errors, $batchResults['errors']);
+
+            // Add delay between batches (except for the last one)
+            if ($batchIndex < count($batches) - 1) {
+                sleep(self::DELAY_BETWEEN_BATCHES);
+            }
+        }
+
+        $this->logResults($totalFiles, $totalRecords, $successfulSends, $errors);
+    }
+
+    private function processBatch(array $batch, string $directory): array
+    {
+        $files = 0;
+        $records = 0;
+        $successful = 0;
+        $errors = [];
+
+        foreach ($batch as $date => $dateRecords) {
             try {
                 $filename = $this->createFilenameFromDate($date);
                 $filePath = "{$directory}/{$filename}";
 
-                // Prepare CSV data
-                $csvData = [];
-                if (Storage::exists($filePath)) {
-                    $existingContent = Storage::get($filePath);
-                    $existingLines = explode("\n", trim($existingContent));
-                    if (!empty($existingLines) && strpos($existingLines[0], 'Transaction Date') !== false) {
-                        array_shift($existingLines);
-                    }
-                    $csvData = array_filter(array_map('str_getcsv', $existingLines));
-                } else {
-                    $csvData[] = ['Transaction Date', 'Transaction Time', 'Amount', 'Mobile Number', 'Transaction ID'];
-                }
-
-                // Add records
-                foreach ($dateRecords as $record) {
-                    $csvData[] = [
-                        $record['transaction_date'] ?? 'N/A',
-                        $record['transaction_time'] ?? 'N/A',
-                        $record['amount'] ?? 'N/A',
-                        $record['mobile_number'] ?? 'N/A',
-                        $record['transaction_id'] ?? 'N/A'
-                    ];
-                }
-
+                $csvData = $this->prepareCsvData($filePath, $dateRecords);
                 $csvString = $this->arrayToCsv($csvData);
 
                 if (Storage::put($filePath, $csvString)) {
-                    $totalFiles++;
-                    $totalRecords += $dateRecords->count();
+                    $files++;
+                    $records += $dateRecords->count();
 
                     $sendResult = $this->sendToAccountingSoftware($csvString, $filename, $dateRecords);
                     if ($sendResult['success']) {
-                        $successfulSends++;
+                        $successful++;
                     }
                 }
-
             } catch (\Exception $e) {
                 $errors[] = "Error processing {$date}: " . $e->getMessage();
             }
         }
 
-        // Single line summary for production
-        $this->info("Processed: {$totalFiles} files, {$totalRecords} records, {$successfulSends} sent successfully" .
+        return [
+            'files' => $files,
+            'records' => $records,
+            'successful_sends' => $successful,
+            'errors' => $errors
+        ];
+    }
+
+    private function prepareCsvData(string $filePath, Collection $dateRecords): array
+    {
+        $csvData = [];
+
+        if (Storage::exists($filePath)) {
+            $existingContent = Storage::get($filePath);
+            $existingLines = explode("\n", trim($existingContent));
+            if (!empty($existingLines) && strpos($existingLines[0], 'Transaction Date') !== false) {
+                array_shift($existingLines);
+            }
+            $csvData = array_filter(array_map('str_getcsv', $existingLines));
+        } else {
+            $csvData[] = ['Transaction Date', 'Transaction Time', 'Amount', 'Mobile Number', 'Transaction ID'];
+        }
+
+        foreach ($dateRecords as $record) {
+            $csvData[] = [
+                $record['transaction_date'] ?? 'N/A',
+                $record['transaction_time'] ?? 'N/A',
+                $record['amount'] ?? 'N/A',
+                $record['mobile_number'] ?? 'N/A',
+                $record['transaction_id'] ?? 'N/A'
+            ];
+        }
+
+        return $csvData;
+    }
+
+    private function logResults(int $files, int $records, int $successful, array $errors): void
+    {
+        $this->info("Processed: {$files} files, {$records} records, {$successful} sent successfully" .
             (count($errors) > 0 ? ", " . count($errors) . " errors" : ""));
 
-        // Log errors to Laravel log instead of console
         foreach ($errors as $error) {
             \Log::error("DAT parsing error: " . $error);
         }
