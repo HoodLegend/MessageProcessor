@@ -51,12 +51,13 @@ Schedule::command('files:move-dat --copy --batch-size=100')
 
 Schedule::command('files:parse-dat --output=csv --save')
     ->everyTwoMinutes()
-    ->withoutOverlapping()
+    // ->withoutOverlapping()
     ->runInBackground()
     ->skip(function () {
         // Skip if move command is still running
         return Cache::has('files:move-dat:running');
     })
+    ->appendOutputTo(storage_path("logs/parsed_data_logs"))
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
         \Log::info('files:parse-dat START at ' . now());
