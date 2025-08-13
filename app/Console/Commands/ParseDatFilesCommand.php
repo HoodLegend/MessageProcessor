@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Illuminate\Console\Command;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Http;
@@ -18,8 +19,10 @@ class ParseDatFilesCommand extends Command
         {--output=table : Output format (table, json, csv)}
         {--save : Save results to CSV file in storage}';
 
-    private const BATCH_SIZE = 100; // Adjust based on your server capacity
+    private const BATCH_SIZE = 50; // Adjust based on your server capacity
     private const DELAY_BETWEEN_BATCHES = 2;
+
+    private const CUTOFF_HOUR = 8;
 
     /**
      * The console command description.
@@ -426,16 +429,94 @@ class ParseDatFilesCommand extends Command
             Storage::makeDirectory($directory);
         }
 
-        $groupedByDate = $results->groupBy('transaction_date');
-        if ($groupedByDate->isEmpty()) {
+        // $groupedByDate = $results->groupBy('transaction_date');
+        // if ($groupedByDate->isEmpty()) {
+        //     return;
+        // }
+
+                //}
+
+        // Filter data to only include current/recent transactions
+        $filteredResults = $this->filterCurrentTransactions($results);
+
+        if ($filteredResults->isEmpty()) {
+            $this->info("No current transactions to process after filtering.");
             return;
         }
+
+        $this->info("Filtered from {$results->count()} to {$filteredResults->count()} transactions");
+        $this->logFilteringStats($results, $filteredResults);
+
+        // Group filtered results by date
+        $groupedByDate = $filteredResults->groupBy('transaction_date');
 
         // Prepare all batches first
         $batches = $this->prepareBatches($groupedByDate);
 
         // Process batches with delay
         $this->processBatchesWithDelay($batches, $directory);
+    }
+
+     /**
+     * Filter transactions to only include those from today after 8 AM
+     */
+    private function filterCurrentTransactions(Collection $results): Collection
+    {
+        $now = now();
+        $todayAfter8AM = $now->copy()->startOfDay()->addHours(self::CUTOFF_HOUR);
+
+        $this->info("Filtering transactions after: " . $todayAfter8AM->format('Y-m-d H:i:s'));
+
+        return $results->filter(function ($record) use ($todayAfter8AM, $now) {
+            try {
+                // Parse the transaction timestamp
+                $transactionDateTime = $this->parseTransactionDateTime($record);
+
+                if (!$transactionDateTime) {
+                    $this->warn("Could not parse datetime for transaction: " . ($record['transaction_id'] ?? 'unknown'));
+                    return false;
+                }
+
+                // Only include transactions from today after 8 AM
+                $isAfterCutoff = $transactionDateTime >= $todayAfter8AM;
+                $isNotFuture = $transactionDateTime <= $now;
+
+                return $isAfterCutoff && $isNotFuture;
+
+            } catch (\Exception $e) {
+                $this->error("Error filtering transaction {$record['transaction_id']}: " . $e->getMessage());
+                return false;
+            }
+        });
+    }
+
+    private function parseTransactionDateTime(array $record): ?Carbon
+    {
+        $date = $record['transaction_date'] ?? null;
+        $time = $record['transaction_time'] ?? null;
+
+        if (!$date) {
+            return null;
+        }
+
+        try {
+            // Handle different date formats
+            if ($time) {
+                // Combine date and time
+                $dateTimeString = $date . ' ' . $time;
+                return Carbon::createFromFormat('Y-m-d H:i:s', $dateTimeString);
+            } else {
+                // Only date provided, assume start of day
+                return Carbon::createFromFormat('Y-m-d', $date);
+            }
+        } catch (\Exception $e) {
+            // Try alternative parsing methods
+            try {
+                return Carbon::parse($date . ' ' . ($time ?? '00:00:00'));
+            } catch (\Exception $e2) {
+                return null;
+            }
+        }
     }
 
     private function prepareBatches(Collection $groupedByDate): array

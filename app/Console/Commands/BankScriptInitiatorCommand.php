@@ -268,7 +268,7 @@ class BankScriptInitiatorCommand extends Command
             $memoryPercentage = ($peakMemory / $limitBytes) * 100;
 
             if ($memoryPercentage > 80) {
-                $this->warn("⚠ Warning: Memory usage is at {$memoryPercentage}% of limit");
+                $this->warn("Warning: Memory usage is at {$memoryPercentage}% of limit");
             }
         }
 

@@ -8,33 +8,26 @@ Artisan::command('inspire', function () {
 })->purpose('Display an inspiring quote');
 
 
-// Schedule::command('messages:cleanup')->weekly()
-//     ->withoutOverlapping()
-//     ->onSuccess(function () {
-//         \Log::info('Message cleanup completed successfully');
-//     })->onFailure(function () {
-//         \Log::error('Message cleanup failed');
-//     });
 
-Schedule::command('messages:download --memory-limit=256M')
-    ->everyThirtyMinutes()
-    ->withoutOverlapping(1800) // 30-minute overlap protection
-    ->runInBackground()
-    // ->sendOutputTo(storage_path('logs/message_downloads.log'))
-    // ->emailOutputOnFailure(['admin@example.com']) // Optional: email on failure
-    ->onSuccess(function () {
-        \Log::info('Message download completed successfully');
-    })
-    ->onFailure(function () {
-        \Log::error('Message download failed');
-    });
+// Schedule::command('messages:download --memory-limit=256M')
+//     ->everyThirtyMinutes()
+//     ->withoutOverlapping(1800) // 30-minute overlap protection
+//     ->runInBackground()
+//     // ->sendOutputTo(storage_path('logs/message_downloads.log'))
+//     // ->emailOutputOnFailure(['admin@example.com']) // Optional: email on failure
+//     ->onSuccess(function () {
+//         \Log::info('Message download completed successfully');
+//     })
+//     ->onFailure(function () {
+//         \Log::error('Message download failed');
+//     });
 
 // Schedule::command('device:whitelist {ip}')
 //     ->everyMinute()
 //     ->withoutOverlapping();
 
 Schedule::command('files:move-dat --copy --batch-size=100')
-    ->everyMinute()
+    ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground()
     ->appendOutputTo(storage_path("logs/data_from_DATfile_logs"))
@@ -50,9 +43,10 @@ Schedule::command('files:move-dat --copy --batch-size=100')
 
 
 Schedule::command('files:parse-dat --output=csv --save')
-    ->everyMinute()
+    ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground()
+    ->appendOutputTo(storage_path("logs/parse_dat_summary.log"))
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
         \Log::info('files:parse-dat START at ' . now());
