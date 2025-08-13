@@ -190,14 +190,8 @@ const initializeDataTable = () => {
                 return json.data
             },
             error: function (xhr, error, thrown) {
-                // console.error('DataTable AJAX error:', error)
-                // error.value = 'Failed to load transaction data. Please try again.'
-                console.error('DataTable AJAX error:', {
-                    status: xhr.status,
-                    error: error,
-                    thrown: thrown,
-                    response: xhr.responseText
-                });
+                console.error('DataTable AJAX error:', error)
+                error.value = 'Failed to load transaction data. Please try again.'
 
                 if (xhr.status === 419) {
                     error.value = 'Session expired. Refreshing page...';
