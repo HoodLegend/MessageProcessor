@@ -1,4 +1,4 @@
-var dn=Object.defineProperty;var fn=(i,t,e)=>t in i?dn(i,t,{enumerable:!0,configurable:!0,writable:!0,value:e}):i[t]=e;var O=(i,t,e)=>fn(i,typeof t!="symbol"?t+"":t,e);import{_ as un}from"./AuthenticatedLayout-BlG9YiVJ.js";import{l as gi,q as gn,c as pn,o as Re,w as mn,a as bn,b as R,u as _n,g as xn,f as pi,t as Ot}from"./app-DdtQ8_h1.js";import"./ApplicationLogo-Bp38ImNJ.js";import"./_plugin-vue_export-helper-DlAUqK2U.js";import"./DigitalClock-0B9-j4h1.js";/*!
+var dn=Object.defineProperty;var fn=(i,t,e)=>t in i?dn(i,t,{enumerable:!0,configurable:!0,writable:!0,value:e}):i[t]=e;var O=(i,t,e)=>fn(i,typeof t!="symbol"?t+"":t,e);import{_ as un}from"./AuthenticatedLayout-OuRGhQ9a.js";import{l as gi,q as gn,c as pn,o as Re,w as mn,a as bn,b as R,u as _n,g as xn,f as pi,t as Ot}from"./app-Cg-itGQp.js";import"./ApplicationLogo-DhqDsPKL.js";import"./_plugin-vue_export-helper-DlAUqK2U.js";import"./DigitalClock-86GuYMhf.js";/*!
  * @kurkle/color v0.3.4
  * https://github.com/kurkle/color#readme
  * (c) 2024 Jukka Kurkela
