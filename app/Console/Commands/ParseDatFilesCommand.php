@@ -24,10 +24,6 @@ class ParseDatFilesCommand extends Command
 
     private const CUTOFF_HOUR = 8;
 
-    private const TRANSACTIONS_PER_BATCH = 20;
-
-    private const DELAY_BETWEEN_INDIVIDUAL = 0.2;
-
     /**
      * The console command description.
      *
@@ -433,8 +429,16 @@ class ParseDatFilesCommand extends Command
             Storage::makeDirectory($directory);
         }
 
-        // Filter data to only include current/recent transactions (your existing logic)
+        // $groupedByDate = $results->groupBy('transaction_date');
+        // if ($groupedByDate->isEmpty()) {
+        //     return;
+        // }
+
+                //}
+
+        // Filter data to only include current/recent transactions
         $filteredResults = $this->filterCurrentTransactions($results);
+
         if ($filteredResults->isEmpty()) {
             $this->info("No current transactions to process after filtering.");
             return;
@@ -443,68 +447,14 @@ class ParseDatFilesCommand extends Command
         $this->info("Filtered from {$results->count()} to {$filteredResults->count()} transactions");
         $this->logFilteringStats($results, $filteredResults);
 
-        // Since we're sending individual transactions, we don't need to group by date
-        // Just process all filtered transactions individually
-        $this->processIndividualTransactions($filteredResults);
-    }
+        // Group filtered results by date
+        $groupedByDate = $filteredResults->groupBy('transaction_date');
 
-    /**
-     * Process individual transactions instead of CSV batches
-     */
-    private function processIndividualTransactions(Collection $transactions): void
-    {
-        $totalTransactions = $transactions->count();
-        $successfulSends = 0;
-        $failedSends = 0;
-        $errors = [];
+        // Prepare all batches first
+        $batches = $this->prepareBatches($groupedByDate);
 
-        $this->info("Processing {$totalTransactions} individual transactions...");
-
-        // Break transactions into smaller batches for system health
-        $transactionBatches = $transactions->chunk(self::TRANSACTIONS_PER_BATCH);
-
-        foreach ($transactionBatches as $batchIndex => $batch) {
-            $this->info("Processing batch " . ($batchIndex + 1) . "/" . $transactionBatches->count() .
-                       " ({$batch->count()} transactions)");
-
-            $batchResults = $this->processBatchOfIndividualTransactions($batch, $batchIndex + 1);
-
-            $successfulSends += $batchResults['successful'];
-            $failedSends += $batchResults['failed'];
-            $errors = array_merge($errors, $batchResults['errors']);
-
-            // Delay between batches
-            if ($batchIndex < $transactionBatches->count() - 1) {
-                $this->info("Cooling down for " . self::DELAY_BETWEEN_BATCHES . " seconds...");
-                sleep(self::DELAY_BETWEEN_BATCHES);
-            }
-        }
-
-        // Final summary
-        $this->info("=== PROCESSING COMPLETE ===");
-        $this->info("Total transactions: {$totalTransactions}");
-        $this->info("Successful sends: {$successfulSends}");
-        $this->info("Failed sends: {$failedSends}");
-        $this->info("Success rate: " . round(($successfulSends / $totalTransactions) * 100, 1) . "%");
-
-        // Log errors
-        if (!empty($errors)) {
-            foreach (array_slice($errors, 0, 5) as $error) {
-                $this->error("  - {$error}");
-            }
-            if (count($errors) > 5) {
-                $this->info("  ... and " . (count($errors) - 5) . " more errors (check logs)");
-            }
-        }
-
-        // Log summary to Laravel log
-        \Log::info("Individual transaction processing completed", [
-            'total_transactions' => $totalTransactions,
-            'successful_sends' => $successfulSends,
-            'failed_sends' => $failedSends,
-            'success_rate_percent' => round(($successfulSends / $totalTransactions) * 100, 1),
-            'error_count' => count($errors)
-        ]);
+        // Process batches with delay
+        $this->processBatchesWithDelay($batches, $directory);
     }
 
      /**
@@ -539,298 +489,6 @@ class ParseDatFilesCommand extends Command
             }
         });
     }
-
-    private function logFilteringStats(Collection $originalResults, Collection $filteredResults): void
-    {
-        $original = $originalResults->count();
-        $filtered = $filteredResults->count();
-        $removed = $original - $filtered;
-
-        $this->info("=== FILTERING STATISTICS ===");
-        $this->info("Original records: {$original}");
-        $this->info("After filtering: {$filtered}");
-        $this->info("Records removed: {$removed}");
-
-        if ($original > 0) {
-            $percentage = round(($filtered / $original) * 100, 2);
-            $this->info("Retention rate: {$percentage}%");
-        }
-
-        // Log date range of filtered data
-        if ($filteredResults->isNotEmpty()) {
-            $dates = $filteredResults->pluck('transaction_date')->unique()->sort();
-            $this->info("Date range: " . $dates->first() . " to " . $dates->last());
-            $this->info("Unique dates: " . $dates->count());
-        }
-
-        // Log to Laravel logs
-        \Log::info('Transaction filtering completed', [
-            'original_count' => $original,
-            'filtered_count' => $filtered,
-            'removed_count' => $removed,
-            'retention_percentage' => $original > 0 ? round(($filtered / $original) * 100, 2) : 0,
-            'date_range' => $filteredResults->isNotEmpty() ? [
-                'from' => $filteredResults->pluck('transaction_date')->min(),
-                'to' => $filteredResults->pluck('transaction_date')->max()
-            ] : null
-        ]);
-    }
-
-    /**
-     * Process a batch of individual transactions
-     */
-    private function processBatchOfIndividualTransactions(Collection $batch, int $batchIndex): array
-    {
-        $successful = 0;
-        $failed = 0;
-        $errors = [];
-
-        foreach ($batch as $index => $transaction) {
-            try {
-                // Parse the CSV format data
-                $transactionData = $this->parseTransactionFromCsvFormat($transaction);
-
-                $result = $this->sendSingleTransactionAsJson($transactionData, $batchIndex, $index + 1);
-
-                if ($result['success']) {
-                    $successful++;
-                    // $this->line(" [{$index + 1}/{$batch->count()}] Transaction {$transactionData['transaction_id']} sent");
-                } else {
-                    $failed++;
-                    $error = "Transaction {$transactionData['transaction_id']}: " . ($result['error'] ?? 'Unknown error');
-                    $errors[] = $error;
-                    // $this->line("  ✗ [{$index + 1}/{$batch->count()}] {$error}");
-                }
-
-                // Small delay between individual transactions
-                if ($index < $batch->count() - 1) {
-                    usleep(self::DELAY_BETWEEN_INDIVIDUAL * 1000000);
-                }
-
-            } catch (\Exception $e) {
-                $failed++;
-                $transactionId = $transaction['transaction_id'] ?? 'UNKNOWN';
-                $error = "Transaction {$transactionId}: Exception - " . $e->getMessage();
-                $errors[] = $error;
-                // $this->error("  ✗ [{$index + 1}/{$batch->count()}] {$error}");
-            }
-        }
-
-        return [
-            'successful' => $successful,
-            'failed' => $failed,
-            'errors' => $errors
-        ];
-    }
-
-
-    /* Parse transaction from your CSV format to standardized array
-     */
-    private function parseTransactionFromCsvFormat(array $transaction): array
-    {
-        // Fields: Transaction Date, Transaction Time, Amount, Mobile Number, Transaction Id
-
-        return [
-            'transaction_date' => $transaction['transaction_date'] ?? $transaction[0] ?? null,
-            'transaction_time' => $transaction['transaction_time'] ?? $transaction[1] ?? '00:00:00',
-            'amount' => $transaction['amount'] ?? $transaction[2] ?? 0,
-            'mobile_number' => $transaction['mobile_number'] ?? $transaction[3] ?? null,
-            'transaction_id' => $transaction['transaction_id'] ?? $transaction[4] ?? null,
-        ];
-    }
-    /**
-     * Send single transaction as JSON to accounting software
-     */
-    private function sendSingleTransactionAsJson(array $transaction, int $batchIndex, int $transactionIndex): array
-    {
-        $transmissionTime = now();
-
-        try {
-            $accountingUrl = config('accounting.endpoint_url', 'https://www.castlebet.darth.bond/api/fnb53nmb');
-
-            // Clean mobile number (remove asterisks if present)
-            $mobileNumber = $transaction['mobile_number'];
-            if ($mobileNumber && str_starts_with($mobileNumber, '*')) {
-                $mobileNumber = ltrim($mobileNumber, '*');
-            }
-
-            // Clean transaction ID (remove asterisks if present)
-            $transactionId = $transaction['transaction_id'];
-            if ($transactionId && str_starts_with($transactionId, '*')) {
-                $transactionId = ltrim($transactionId, '*');
-            }
-
-            // Prepare JSON payload for single transaction
-            $payload = [
-                'username' => $mobileNumber,
-                'amount' => floatval($transaction['amount']),
-                'transactionid' => $transactionId,
-                'time' => $transaction['transaction_date'] . '' . $transaction['transaction_time']
-            ];
-
-            // Remove null/empty values
-            $payload = array_filter($payload, function($value) {
-                return $value !== null && $value !== '' && $value !== 0;
-            });
-
-            // Send HTTP request
-            $response = Http::timeout(10)
-                ->connectTimeout(5)
-                ->retry(2, 500) // 2 retries with 500ms delay
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'Accept' => 'application/json',
-                    'X-Transaction-ID' => $transactionId,
-                    'X-Batch-Index' => $batchIndex,
-                ])
-                ->post($accountingUrl, $payload);
-
-            if ($response->successful()) {
-                $responseData = $response->json();
-
-                // Log successful transmission
-                $this->logIndividualTransactionSuccess([
-                    'transaction_id' => $transactionId,
-                    'transaction_date' => $transaction['transaction_date'],
-                    'amount' => $transaction['amount'],
-                    'mobile_number' => $mobileNumber,
-                    'payload' => $payload,
-                    'response' => $responseData,
-                    'batch_index' => $batchIndex,
-                    'transmission_time' => $transmissionTime,
-                ]);
-
-                return [
-                    'success' => true,
-                    'response' => $responseData,
-                    'transaction_id' => $transactionId
-                ];
-
-            } else {
-                $errorMessage = "HTTP {$response->status()}: " . $response->body();
-
-                // Log failed transmission
-                $this->logIndividualTransactionFailure([
-                    'transaction_id' => $transactionId,
-                    'transaction_date' => $transaction['transaction_date'],
-                    'amount' => $transaction['amount'],
-                    'mobile_number' => $mobileNumber,
-                    'payload' => $payload,
-                    'error' => $errorMessage,
-                    'response_status' => $response->status(),
-                    'batch_index' => $batchIndex,
-                    'transmission_time' => $transmissionTime,
-                ]);
-
-                return [
-                    'success' => false,
-                    'error' => $errorMessage,
-                    'transaction_id' => $transactionId
-                ];
-            }
-
-        } catch (\Exception $e) {
-            $errorMessage = $e->getMessage();
-            $transactionId = $transaction['transaction_id'] ?? 'UNKNOWN';
-
-            // Log exception
-            $this->logIndividualTransactionException([
-                'transaction_id' => $transactionId,
-                'transaction_date' => $transaction['transaction_date'] ?? 'UNKNOWN',
-                'error' => $errorMessage,
-                'exception_class' => get_class($e),
-                'batch_index' => $batchIndex,
-                'transmission_time' => $transmissionTime,
-            ]);
-
-            return [
-                'success' => false,
-                'error' => $errorMessage,
-                'transaction_id' => $transactionId
-            ];
-        }
-    }
-
-    /**
-     * Log successful individual transaction
-     */
-    private function logIndividualTransactionSuccess(array $data): void
-    {
-        \Log::info("Individual transaction sent successfully", [
-            'transaction_id' => $data['transaction_id'],
-            'date' => $data['transaction_date'],
-            'amount' => $data['amount'],
-            'mobile_number' => $data['mobile_number'],
-            'batch_index' => $data['batch_index'],
-            'response_status' => 'SUCCESS',
-            'payload' => $data['payload'],
-            'response' => $data['response'],
-        ]);
-
-        // Also save to individual transaction log file
-        $this->saveIndividualTransactionLog($data['transaction_date'],
-            "SUCCESS: {$data['transaction_id']} - Amount: {$data['amount']} - Mobile: {$data['mobile_number']} - Time: {$data['transmission_time']}\n"
-        );
-    }
-
-    /**
-     * Log failed individual transaction
-     */
-    private function logIndividualTransactionFailure(array $data): void
-    {
-        \Log::error("Individual transaction failed", [
-            'transaction_id' => $data['transaction_id'],
-            'date' => $data['transaction_date'],
-            'amount' => $data['amount'],
-            'mobile_number' => $data['mobile_number'],
-            'batch_index' => $data['batch_index'],
-            'response_status' => 'FAILED',
-            'error' => $data['error'],
-            'http_status' => $data['response_status'],
-            'payload' => $data['payload'],
-        ]);
-
-        // Also save to individual transaction log file
-        $this->saveIndividualTransactionLog($data['transaction_date'],
-            "FAILED: {$data['transaction_id']} - Error: {$data['error']} - Time: {$data['transmission_time']}\n"
-        );
-    }
-
-    /**
-     * Log exception for individual transaction
-     */
-    private function logIndividualTransactionException(array $data): void
-    {
-        \Log::error("Individual transaction exception", [
-            'transaction_id' => $data['transaction_id'],
-            'date' => $data['transaction_date'],
-            'batch_index' => $data['batch_index'],
-            'response_status' => 'ERROR',
-            'error' => $data['error'],
-            'exception_class' => $data['exception_class'],
-        ]);
-
-        // Also save to individual transaction log file
-        $this->saveIndividualTransactionLog($data['transaction_date'],
-            "ERROR: {$data['transaction_id']} - Exception: {$data['error']} - Time: {$data['transmission_time']}\n"
-        );
-    }
-
-    /**
-     * Save individual transaction log to date-specific file
-     */
-    private function saveIndividualTransactionLog(string $date, string $logEntry): void
-    {
-        $logDirectory = 'logs/individual_transactions';
-        if (!Storage::exists($logDirectory)) {
-            Storage::makeDirectory($logDirectory);
-        }
-
-        $logFile = "{$logDirectory}/individual_transactions_{$date}.log";
-        Storage::append($logFile, $logEntry);
-    }
-
-
 
     private function parseTransactionDateTime(array $record): ?Carbon
     {
