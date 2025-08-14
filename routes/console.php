@@ -27,7 +27,7 @@ Artisan::command('inspire', function () {
 //     ->withoutOverlapping();
 
 Schedule::command('files:move-dat --copy --batch-size=100')
-    ->everyTwoMinutes()
+    ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground()
     ->appendOutputTo(storage_path("logs/data_from_DATfile_logs"))
@@ -43,7 +43,7 @@ Schedule::command('files:move-dat --copy --batch-size=100')
 
 
 Schedule::command('files:parse-dat --output=csv --save')
-    ->everyMinute()
+    ->everyFiveMinutes()
     ->withoutOverlapping()
     ->runInBackground()
     ->appendOutputTo(storage_path("logs/parse_dat_summary.log"))

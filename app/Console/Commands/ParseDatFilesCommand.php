@@ -20,9 +20,8 @@ class ParseDatFilesCommand extends Command
         {--save : Save results to CSV file in storage}';
 
     private const BATCH_SIZE = 50; // Adjust based on your server capacity
-    private const DELAY_BETWEEN_BATCHES = 2;
 
-    private const CUTOFF_HOUR = 8;
+    private const DELAY_BETWEEN_INDIVIDUAL = 0.3;
 
     /**
      * The console command description.
@@ -424,258 +423,262 @@ class ParseDatFilesCommand extends Command
 
     private function saveResults(Collection $results): void
     {
+        // directory to save the parsed dat files.
         $directory = 'exports';
+
+        // check if directory exists.
         if (!Storage::exists($directory)) {
             Storage::makeDirectory($directory);
         }
 
-        // $groupedByDate = $results->groupBy('transaction_date');
-        // if ($groupedByDate->isEmpty()) {
-        //     return;
-        // }
-
-        //}
-
-        // Filter data to only include current/recent transactions
-        $filteredResults = $this->filterCurrentTransactions($results);
-
-        if ($filteredResults->isEmpty()) {
-            $this->info("No current transactions to process after filtering.");
+        if ($results->isEmpty()) {
+            $this->info("No transactions to process.");
             return;
         }
 
-        $this->info("Filtered from {$results->count()} to {$filteredResults->count()} transactions");
+        $this->info("Starting to process {$results->count()} total transactions...");
+
+        // Save ALL parsed data to CSV files (regardless of date)
+        $this->saveAllDataToCsv($results, $directory);
+
+        // Filter data for current/recent transactions only
+        $filteredResults = $this->filterCurrentTransactions($results);
+
+        if ($filteredResults->isEmpty()) {
+            $this->info("No current transactions to send to accounting software after filtering.");
+            return;
+        }
+
+        $this->info("Filtered from {$results->count()} to {$filteredResults->count()} transactions for transmission");
         $this->logFilteringStats($results, $filteredResults);
 
-        // Group filtered results by date
-        $groupedByDate = $filteredResults->groupBy('transaction_date');
-
-        // Prepare all batches first
-        $batches = $this->prepareBatches($groupedByDate);
-
-        // Process batches with delay
-        $this->processBatchesWithDelay($batches, $directory);
+        // end filtered data as individual JSON transactions
+        $this->sendIndividualTransactions($filteredResults);
     }
 
-
-    private function logFilteringStats(Collection $originalResults, Collection $filteredResults): void
+    /**
+     * Save ALL parsed data to CSV files (organized by date)
+     */
+    private function saveAllDataToCsv(Collection $results, string $directory): void
     {
+        $this->info("SAVING ALL DATA TO CSV FILES");
 
+        $groupedByDate = $results->groupBy('transaction_date');
+        $totalFiles = 0;
+        $totalRecords = 0;
 
-        $original = $originalResults->count();
+        foreach ($groupedByDate as $date => $dateRecords) {
+            try {
+                $filename = $this->createFilenameFromDate($date);
+                $filePath = "{$directory}/{$filename}";
 
+                // Prepare CSV data for this date
+                $csvData = [];
 
-        $filtered = $filteredResults->count();
+                // Check if file already exists and load existing data
+                if (Storage::exists($filePath)) {
+                    $existingContent = Storage::get($filePath);
+                    $existingLines = explode("\n", trim($existingContent));
+                    if (!empty($existingLines) && strpos($existingLines[0], 'Transaction Date') !== false) {
+                        array_shift($existingLines); // Remove header
+                    }
+                    $csvData = array_filter(array_map('str_getcsv', $existingLines));
+                } else {
+                    // Add header for new file
+                    $csvData[] = ['Transaction Date', 'Transaction Time', 'Amount', 'Mobile Number', 'Transaction ID'];
+                }
 
+                // Add new records to CSV data
+                foreach ($dateRecords as $record) {
+                    $csvData[] = [
+                        $record['transaction_date'] ?? 'N/A',
+                        $record['transaction_time'] ?? 'N/A',
+                        $record['amount'] ?? 'N/A',
+                        $record['mobile_number'] ?? 'N/A',
+                        $record['transaction_id'] ?? 'N/A'
+                    ];
+                }
 
-        $removed = $original - $filtered;
+                // Convert to CSV string and save
+                $csvString = $this->arrayToCsv($csvData);
 
+                if (Storage::put($filePath, $csvString)) {
+                    $totalFiles++;
+                    $totalRecords += $dateRecords->count();
+                    $this->info("Saved {$dateRecords->count()} records to {$filename}");
+                } else {
+                    $this->error("Failed to save {$filename}");
+                }
 
-
-
-
-        $this->info("=== FILTERING STATISTICS ===");
-
-
-        $this->info("Original records: {$original}");
-
-
-        $this->info("After filtering: {$filtered}");
-
-
-        $this->info("Records removed: {$removed}");
-
-
-
-
-
-        if ($original > 0) {
-
-
-            $percentage = round(($filtered / $original) * 100, 2);
-
-
-            $this->info("Retention rate: {$percentage}%");
-
-
+            } catch (\Exception $e) {
+                $this->error("Error saving {$date}: " . $e->getMessage());
+            }
         }
 
-
-
-
-
-        // Log date range of filtered data
-
-
-        if ($filteredResults->isNotEmpty()) {
-
-
-            $dates = $filteredResults->pluck('transaction_date')->unique()->sort();
-
-
-            $this->info("Date range: " . $dates->first() . " to " . $dates->last());
-
-
-            $this->info("Unique dates: " . $dates->count());
-
-
-        }
-
-
-
-
-
-        // Log to Laravel logs
-
-
-        \Log::info('Transaction filtering completed', [
-
-
-            'original_count' => $original,
-
-
-            'filtered_count' => $filtered,
-
-
-            'removed_count' => $removed,
-
-
-            'retention_percentage' => $original > 0 ? round(($filtered / $original) * 100, 2) : 0,
-
-
-            'date_range' => $filteredResults->isNotEmpty() ? [
-
-
-                'from' => $filteredResults->pluck('transaction_date')->min(),
-
-
-                'to' => $filteredResults->pluck('transaction_date')->max()
-
-
-            ] : null
-
-
-        ]);
-
-
+        $this->info("CSV Save Summary: {$totalFiles} files, {$totalRecords} total records saved");
     }
 
 
     /**
-     * Filter transactions to only include those from today after 8 AM
+     * Send filtered transactions as individual JSON requests
+     */
+    private function sendIndividualTransactions(Collection $filteredResults): void
+    {
+        $this->info("=== SENDING INDIVIDUAL TRANSACTIONS ===");
+
+        $accountingUrl = config('accounting.endpoint_url', 'https://www.castlebet.darth.bond/api/fnb53nmb');
+        $successfulSends = 0;
+        $failedSends = 0;
+        $errors = [];
+        $startTime = microtime(true);
+
+        foreach ($filteredResults as $index => $transaction) {
+            try {
+                // Prepare individual transaction payload with "username" instead of "msisdn"
+                $payload = [
+                    'username' => $transaction['mobile_number'] ?? null,
+                    'amount' => floatval($transaction['amount'] ?? 0),
+                    'transactionid' => $transaction['transaction_id'] ?? null,
+                    'time' => $transaction['transaction_date'] . 'T' . ($transaction['transaction_time'] ?? '00:00:00')
+                ];
+
+                // Remove null/empty values
+                $payload = array_filter($payload, function($value) {
+                    return $value !== null && $value !== '';
+                });
+
+                $this->line("  → [($index + 1)/{$filteredResults->count()}] Sending {$transaction['transaction_id']}...");
+
+                // Send individual transaction
+                $response = Http::timeout(15)
+                    ->connectTimeout(5)
+                    ->retry(2, 500) // 2 retries with 500ms delay
+                    ->withHeaders([
+                        'Content-Type' => 'application/json',
+                        'Accept' => 'application/json',
+                        'X-Transaction-ID' => $transaction['transaction_id'],
+                    ])
+                    ->post($accountingUrl, $payload);
+
+                if ($response->successful()) {
+                    $successfulSends++;
+                    $this->line("    ✓ Success ({$response->status()})");
+
+                    // Log successful transaction
+                    $this->logIndividualTransaction('SUCCESS', $transaction, $payload, $response->json());
+                } else {
+                    $failedSends++;
+                    $errorMsg = "HTTP {$response->status()}: " . $response->body();
+                    $errors[] = "Transaction {$transaction['transaction_id']}: {$errorMsg}";
+                    $this->line("    ✗ Failed: {$errorMsg}");
+
+                    // Log failed transaction
+                    $this->logIndividualTransaction('FAILED', $transaction, $payload, null, $errorMsg);
+                }
+
+                // Small delay between individual transactions
+                if ($index < $filteredResults->count() - 1) {
+                    usleep(self::DELAY_BETWEEN_INDIVIDUAL * 1000000);
+                }
+
+            } catch (\Exception $e) {
+                $failedSends++;
+                $errorMsg = "Exception: " . $e->getMessage();
+                $errors[] = "Transaction {$transaction['transaction_id']}: {$errorMsg}";
+                $this->error("    ✗ {$errorMsg}");
+
+                // Log exception
+                $this->logIndividualTransaction('ERROR', $transaction, $payload ?? [], null, $errorMsg);
+            }
+        }
+
+        $processingTime = round(microtime(true) - $startTime, 2);
+
+        // Transmission Summary
+        $this->info("=== TRANSMISSION COMPLETE ===");
+        $this->info("Processing time: {$processingTime} seconds");
+        $this->info("Successful sends: {$successfulSends}");
+        $this->info("Failed sends: {$failedSends}");
+        $this->info("Success rate: " . round(($successfulSends / $filteredResults->count()) * 100, 1) . "%");
+
+        // Create transmission summary log entry
+        $this->createTransmissionSummary([
+            'total_filtered_transactions' => $filteredResults->count(),
+            'successful_sends' => $successfulSends,
+            'failed_sends' => $failedSends,
+            'processing_time_seconds' => $processingTime,
+            'success_rate_percent' => round(($successfulSends / $filteredResults->count()) * 100, 1),
+            'errors' => $errors
+        ]);
+
+        // Log errors to Laravel log
+        foreach ($errors as $error) {
+            \Log::error("Individual transaction transmission error: " . $error);
+        }
+    }
+
+         /**
+     * Filter transactions for current/recent data only
      */
     private function filterCurrentTransactions(Collection $results): Collection
     {
-        $now = now();
-        $todayAfter8AM = $now->copy()->startOfDay()->addHours(self::CUTOFF_HOUR);
+        $today = now()->format('Y-m-d');
+        $yesterday = now()->subDay()->format('Y-m-d');
 
-        $this->info("Filtering transactions after: " . $todayAfter8AM->format('Y-m-d H:i:s'));
-
-        return $results->filter(function ($record) use ($todayAfter8AM, $now) {
-            try {
-                // Parse the transaction timestamp
-                $transactionDateTime = $this->parseTransactionDateTime($record);
-
-                if (!$transactionDateTime) {
-                    $this->warn("Could not parse datetime for transaction: " . ($record['transaction_id'] ?? 'unknown'));
-                    return false;
-                }
-
-                // Only include transactions from today after 8 AM
-                $isAfterCutoff = $transactionDateTime >= $todayAfter8AM;
-                $isNotFuture = $transactionDateTime <= $now;
-
-                return $isAfterCutoff && $isNotFuture;
-
-            } catch (\Exception $e) {
-                $this->error("Error filtering transaction {$record['transaction_id']}: " . $e->getMessage());
-                return false;
-            }
+        // Filter for today and yesterday only (adjust as needed)
+        return $results->filter(function($record) use ($today, $yesterday) {
+            $transactionDate = $record['transaction_date'] ?? '';
+            return in_array($transactionDate, [$today, $yesterday]);
         });
     }
 
-    private function parseTransactionDateTime(array $record): ?Carbon
+
+  /**
+     * Log filtering statistics
+     */
+    private function logFilteringStats(Collection $originalResults, Collection $filteredResults): void
     {
-        $date = $record['transaction_date'] ?? null;
-        $time = $record['transaction_time'] ?? null;
+        $originalByDate = $originalResults->groupBy('transaction_date');
+        $filteredByDate = $filteredResults->groupBy('transaction_date');
 
-        if (!$date) {
-            return null;
-        }
+        $this->info("=== FILTERING STATISTICS ===");
+        $this->info("Original data spans " . $originalByDate->count() . " dates:");
 
-        try {
-            // Handle different date formats
-            if ($time) {
-                // Combine date and time
-                $dateTimeString = $date . ' ' . $time;
-                return Carbon::createFromFormat('Y-m-d H:i:s', $dateTimeString);
-            } else {
-                // Only date provided, assume start of day
-                return Carbon::createFromFormat('Y-m-d', $date);
-            }
-        } catch (\Exception $e) {
-            // Try alternative parsing methods
-            try {
-                return Carbon::parse($date . ' ' . ($time ?? '00:00:00'));
-            } catch (\Exception $e2) {
-                return null;
-            }
+        foreach ($originalByDate as $date => $records) {
+            $filteredCount = $filteredByDate->get($date, collect())->count();
+            $status = $filteredCount > 0 ? "✓ SENT" : "✗ SKIPPED";
+            $this->info("  {$date}: {$records->count()} records → {$filteredCount} sent ({$status})");
         }
     }
 
-    private function prepareBatches(Collection $groupedByDate): array
+      /**
+     * Log individual transaction details
+     */
+    private function logIndividualTransaction(string $status, array $transaction, array $payload, ?array $response, ?string $error = null): void
     {
-        $batches = [];
-        $currentBatch = [];
-        $currentBatchSize = 0;
+        $logData = [
+            'status' => $status,
+            'transaction_id' => $transaction['transaction_id'],
+            'amount' => $transaction['amount'],
+            'mobile_number' => $transaction['mobile_number'],
+            'transaction_date' => $transaction['transaction_date'],
+            'transmission_time' => now()->toISOString(),
+            'payload_sent' => $payload,
+        ];
 
-        foreach ($groupedByDate as $date => $dateRecords) {
-            // If adding this date would exceed batch size, save current batch
-            if ($currentBatchSize + $dateRecords->count() > self::BATCH_SIZE && !empty($currentBatch)) {
-                $batches[] = $currentBatch;
-                $currentBatch = [];
-                $currentBatchSize = 0;
-            }
-
-            $currentBatch[$date] = $dateRecords;
-            $currentBatchSize += $dateRecords->count();
+        if ($response) {
+            $logData['server_response'] = $response;
         }
 
-        // Add remaining batch
-        if (!empty($currentBatch)) {
-            $batches[] = $currentBatch;
+        if ($error) {
+            $logData['error_message'] = $error;
         }
 
-        return $batches;
+        \Log::info("Individual transaction transmission: {$status}", $logData);
     }
 
-    private function processBatchesWithDelay(array $batches, string $directory): void
-    {
-        $totalFiles = 0;
-        $totalRecords = 0;
-        $successfulSends = 0;
-        $errors = [];
 
-        $this->info("Processing " . count($batches) . " batches...");
 
-        foreach ($batches as $batchIndex => $batch) {
-            $this->info("Processing batch " . ($batchIndex + 1) . "/" . count($batches));
-
-            $batchResults = $this->processBatch($batch, $directory);
-
-            $totalFiles += $batchResults['files'];
-            $totalRecords += $batchResults['records'];
-            $successfulSends += $batchResults['successful_sends'];
-            $errors = array_merge($errors, $batchResults['errors']);
-
-            // Add delay between batches (except for the last one)
-            if ($batchIndex < count($batches) - 1) {
-                sleep(self::DELAY_BETWEEN_BATCHES);
-            }
-        }
-
-        $this->logResults($totalFiles, $totalRecords, $successfulSends, $errors);
-    }
 
     private function processBatch(array $batch, string $directory): array
     {
@@ -985,11 +988,6 @@ class ParseDatFilesCommand extends Command
             ]);
         }
     }
-
-
-
-
-
 
     /**
      * Create a filename from a date string
