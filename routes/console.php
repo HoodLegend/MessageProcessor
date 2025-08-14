@@ -2,6 +2,7 @@
 
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
+use Illuminate\Support\Facades\Schedule;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -39,7 +40,6 @@ Schedule::command('files:move-dat --copy --batch-size=100')
     ->onFailure(function () {
         \Log::error('Scheduled message processing failed');
     });
-
 
 
 Schedule::command('files:parse-dat --output=csv --save')
