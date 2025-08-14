@@ -26,24 +26,24 @@ Artisan::command('inspire', function () {
 //     ->everyMinute()
 //     ->withoutOverlapping();
 
-Schedule::command('files:move-dat --copy --batch-size=100')
-    ->everyFiveMinutes()
-    ->withoutOverlapping()
-    ->runInBackground()
-    ->appendOutputTo(storage_path("logs/data_from_DATfile_logs"))
-    ->onSuccess(function () {
-        \Log::info('Scheduled message processing completed successfully');
-        \Log::info('files:move-dat START at ' . now());
-        \Log::info('files:move-dat END at ' . now());
-    })
-    ->onFailure(function () {
-        \Log::error('Scheduled message processing failed');
-    });
+// Schedule::command('files:move-dat --copy --batch-size=100')
+//     ->everyFiveMinutes()
+//     ->withoutOverlapping()
+//     ->runInBackground()
+//     ->appendOutputTo(storage_path("logs/data_from_DATfile_logs"))
+//     ->onSuccess(function () {
+//         \Log::info('Scheduled message processing completed successfully');
+//         \Log::info('files:move-dat START at ' . now());
+//         \Log::info('files:move-dat END at ' . now());
+//     })
+//     ->onFailure(function () {
+//         \Log::error('Scheduled message processing failed');
+//     });
 
 
 
 Schedule::command('files:parse-dat --output=csv --save')
-    ->everyFiveMinutes()
+    ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
     ->appendOutputTo(storage_path("logs/parse_dat_summary.log"))
