@@ -434,7 +434,7 @@ class ParseDatFilesCommand extends Command
         //     return;
         // }
 
-                //}
+        //}
 
         // Filter data to only include current/recent transactions
         $filteredResults = $this->filterCurrentTransactions($results);
@@ -457,7 +457,111 @@ class ParseDatFilesCommand extends Command
         $this->processBatchesWithDelay($batches, $directory);
     }
 
-     /**
+
+    private function logFilteringStats(Collection $originalResults, Collection $filteredResults): void
+    {
+
+
+        $original = $originalResults->count();
+
+
+        $filtered = $filteredResults->count();
+
+
+        $removed = $original - $filtered;
+
+
+
+
+
+        $this->info("=== FILTERING STATISTICS ===");
+
+
+        $this->info("Original records: {$original}");
+
+
+        $this->info("After filtering: {$filtered}");
+
+
+        $this->info("Records removed: {$removed}");
+
+
+
+
+
+        if ($original > 0) {
+
+
+            $percentage = round(($filtered / $original) * 100, 2);
+
+
+            $this->info("Retention rate: {$percentage}%");
+
+
+        }
+
+
+
+
+
+        // Log date range of filtered data
+
+
+        if ($filteredResults->isNotEmpty()) {
+
+
+            $dates = $filteredResults->pluck('transaction_date')->unique()->sort();
+
+
+            $this->info("Date range: " . $dates->first() . " to " . $dates->last());
+
+
+            $this->info("Unique dates: " . $dates->count());
+
+
+        }
+
+
+
+
+
+        // Log to Laravel logs
+
+
+        \Log::info('Transaction filtering completed', [
+
+
+            'original_count' => $original,
+
+
+            'filtered_count' => $filtered,
+
+
+            'removed_count' => $removed,
+
+
+            'retention_percentage' => $original > 0 ? round(($filtered / $original) * 100, 2) : 0,
+
+
+            'date_range' => $filteredResults->isNotEmpty() ? [
+
+
+                'from' => $filteredResults->pluck('transaction_date')->min(),
+
+
+                'to' => $filteredResults->pluck('transaction_date')->max()
+
+
+            ] : null
+
+
+        ]);
+
+
+    }
+
+
+    /**
      * Filter transactions to only include those from today after 8 AM
      */
     private function filterCurrentTransactions(Collection $results): Collection
@@ -694,10 +798,10 @@ class ParseDatFilesCommand extends Command
                 'record_count' => $records->count(),
                 'csv_data' => $csvContent,
                 'metadata' => [
-                    'source' => 'transaction_processor',
-                    'generated_at' => $transmissionTime->toISOString(),
-                    'total_amount' => $records->sum('amount') ?? 0,
-                ]
+                        'source' => 'transaction_processor',
+                        'generated_at' => $transmissionTime->toISOString(),
+                        'total_amount' => $records->sum('amount') ?? 0,
+                    ]
             ];
 
             $this->line("  → Sending {$records->count()} records to accounting software...");
@@ -881,6 +985,8 @@ class ParseDatFilesCommand extends Command
             ]);
         }
     }
+
+
 
 
 
