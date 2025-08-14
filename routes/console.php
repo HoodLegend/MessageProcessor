@@ -46,7 +46,7 @@ Schedule::command('files:parse-dat --output=csv --save')
     ->everyMinute()
     ->withoutOverlapping()
     ->runInBackground()
-    // ->appendOutputTo(storage_path("logs/parse_dat_summary.log"))
+    ->appendOutputTo(storage_path("logs/parse_dat_summary.log"))
     ->onSuccess(function () {
         \Log::info('Scheduled message processing completed successfully');
         \Log::info('files:parse-dat START at ' . now());
