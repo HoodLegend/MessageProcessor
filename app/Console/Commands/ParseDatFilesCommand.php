@@ -632,6 +632,51 @@ class ParseDatFilesCommand extends Command
         });
     }
 
+/**
+     * Create comprehensive transmission summary
+     */
+    private function createTransmissionSummary(array $summaryData): void
+    {
+        $transmissionTime = now();
+        Storage::makeDirectory('logs');
+
+        $avgTime = $summaryData['total_filtered_transactions'] > 0
+            ? round($summaryData['processing_time_seconds'] / $summaryData['total_filtered_transactions'], 3)
+            : 0;
+
+        $logEntry = "============================================================\n";
+        $logEntry .= "INDIVIDUAL TRANSACTION TRANSMISSION SUMMARY\n";
+        $logEntry .= "============================================================\n";
+        $logEntry .= "Timestamp                   : {$transmissionTime->format('Y-m-d H:i:s')}\n";
+        $logEntry .= "Total Filtered Transactions : {$summaryData['total_filtered_transactions']}\n";
+        $logEntry .= "Successful Transmissions    : {$summaryData['successful_sends']}\n";
+        $logEntry .= "Failed Transmissions        : {$summaryData['failed_sends']}\n";
+        $logEntry .= "Success Rate                : " . number_format($summaryData['success_rate_percent'], 2) . "%\n";
+        $logEntry .= "Processing Time             : {$summaryData['processing_time_seconds']} seconds\n";
+        $logEntry .= "Average Time Per Transaction: {$avgTime} seconds\n";
+
+        if (!empty($summaryData['errors'])) {
+            $logEntry .= "\nERRORS ENCOUNTERED:\n";
+            foreach (array_slice($summaryData['errors'], 0, 10) as $error) {
+                $logEntry .= "  - {$error}\n";
+            }
+            if (count($summaryData['errors']) > 10) {
+                $logEntry .= "  ... and " . (count($summaryData['errors']) - 10) . " more errors\n";
+            }
+        }
+
+        $logEntry .= "============================================================\n\n";
+
+        try {
+            $logFile = 'logs/transactions_summary_' . $transmissionTime->format('Y-m-d') . '.log';
+            Storage::append($logFile, $logEntry);
+        } catch (\Exception $e) {
+            \Log::error("Failed to write transmission summary: " . $e->getMessage());
+        }
+
+        \Log::info('Individual transaction transmission completed', $summaryData);
+    }
+
 
   /**
      * Log filtering statistics
