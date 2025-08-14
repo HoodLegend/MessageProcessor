@@ -628,7 +628,6 @@ class ParseDatFilesCommand extends Command
      */
     private function parseTransactionFromCsvFormat(array $transaction): array
     {
-        // Your CSV format: 2025-05-05,23:22:30,50.00,*813835110,*NAM0M4C94WQB
         // Fields: Transaction Date, Transaction Time, Amount, Mobile Number, Transaction Id
 
         return [
@@ -663,10 +662,10 @@ class ParseDatFilesCommand extends Command
 
             // Prepare JSON payload for single transaction
             $payload = [
-                'msisdn' => $mobileNumber,
+                'username' => $mobileNumber,
                 'amount' => floatval($transaction['amount']),
                 'transactionid' => $transactionId,
-                'time' => $transaction['transaction_date'] . 'T' . $transaction['transaction_time']
+                'time' => $transaction['transaction_date'] . '' . $transaction['transaction_time']
             ];
 
             // Remove null/empty values
