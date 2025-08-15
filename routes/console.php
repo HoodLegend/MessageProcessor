@@ -33,12 +33,12 @@ Schedule::command('files:move-dat --copy --batch-size=100')
     ->runInBackground()
     ->appendOutputTo(storage_path("logs/data_from_DATfile_logs"))
     ->onSuccess(function () {
-        \Log::info('Scheduled message processing completed successfully');
+        \Log::info('Scheduled message copying completed successfully');
         \Log::info('files:move-dat START at ' . now());
         \Log::info('files:move-dat END at ' . now());
     })
     ->onFailure(function () {
-        \Log::error('Scheduled message processing failed');
+        \Log::error('Scheduled message copying failed');
     });
 
 
