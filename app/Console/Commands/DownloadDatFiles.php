@@ -104,11 +104,11 @@ class DownloadDatFiles extends Command
                     // Remove original file if not in copy mode
                     if (!$copyMode) {
                         File::delete($filePath);
-                        $this->line("  └─ Original file removed");
+                        $this->line("Original file removed");
                     }
                 } else {
                     $failCount++;
-                    $this->error("✗ Failed to store: {$fileName}");
+                    $this->error("Failed to store: {$fileName}");
                 }
 
                 $processedCount++;

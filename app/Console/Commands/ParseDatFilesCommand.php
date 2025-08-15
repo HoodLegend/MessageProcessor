@@ -452,7 +452,7 @@ class ParseDatFilesCommand extends Command
         $this->info("Filtered from {$results->count()} to {$filteredResults->count()} transactions for transmission");
         $this->logFilteringStats($results, $filteredResults);
 
-        // end filtered data as individual JSON transactions
+        // send filtered data as individual JSON transactions
         $this->sendIndividualTransactions($filteredResults);
     }
 
@@ -522,32 +522,147 @@ class ParseDatFilesCommand extends Command
     /**
      * Send filtered transactions as individual JSON requests
      */
+    // private function sendIndividualTransactions(Collection $filteredResults): void
+    // {
+    //     $accountingUrl = config('accounting.endpoint_url', 'https://www.castlebet.darth.bond/api/fnb53nmb');
+    //     $successfulSends = 0;
+    //     $failedSends = 0;
+    //     $errors = [];
+    //     $startTime = microtime(true);
+
+    //     foreach ($filteredResults as $index => $transaction) {
+    //         try {
+    //             // Prepare individual transaction payload with "username" instead of "msisdn"
+    //             $payload = [
+    //                 'username' => $transaction['mobile_number'] ?? null,
+    //                 'amount' => floatval($transaction['amount'] ?? 0),
+    //                 'transactionid' => $transaction['transaction_id'] ?? null,
+    //                 'time' => $transaction['transaction_date'] . ' ' . ($transaction['transaction_time'] ?? '00:00:00')
+    //             ];
+
+    //             // Remove null/empty values
+    //             $payload = array_filter($payload, function($value) {
+    //                 return $value !== null && $value !== '';
+    //             });
+
+    //             $this->line("[($index + 1)/{$filteredResults->count()}] Sending {$transaction['transaction_id']}...");
+
+    //             // Send individual transaction
+    //             $response = Http::timeout(15)
+    //                 ->connectTimeout(5)
+    //                 ->retry(2, 500) // 2 retries with 500ms delay
+    //                 ->withHeaders([
+    //                     'Content-Type' => 'application/json',
+    //                     'Accept' => 'application/json',
+    //                     'X-Transaction-ID' => $transaction['transaction_id'],
+    //                 ])
+    //                 ->post($accountingUrl, $payload);
+
+    //             if ($response->successful()) {
+    //                 $successfulSends++;
+    //                 $this->line("Success ({$response->status()})");
+
+    //                 // Log successful transaction
+    //                 $this->logIndividualTransaction('SUCCESS', $transaction, $payload, $response->json());
+    //             } else {
+    //                 $failedSends++;
+    //                 $errorMsg = "HTTP {$response->status()}: " . $response->body();
+    //                 $errors[] = "Transaction {$transaction['transaction_id']}: {$errorMsg}";
+    //                 $this->line("Failed: {$errorMsg}");
+
+    //                 // Log failed transaction
+    //                 $this->logIndividualTransaction('FAILED', $transaction, $payload, null, $errorMsg);
+    //             }
+
+    //             // Small delay between individual transactions
+    //             if ($index < $filteredResults->count() - 1) {
+    //                 usleep(self::DELAY_BETWEEN_INDIVIDUAL * 1000000);
+    //             }
+
+    //         } catch (\Exception $e) {
+    //             $failedSends++;
+    //             $errorMsg = "Exception: " . $e->getMessage();
+    //             $errors[] = "Transaction {$transaction['transaction_id']}: {$errorMsg}";
+    //             $this->error("    ✗ {$errorMsg}");
+
+    //             // Log exception
+    //             $this->logIndividualTransaction('ERROR', $transaction, $payload ?? [], null, $errorMsg);
+    //         }
+    //     }
+
+    //     $processingTime = round(microtime(true) - $startTime, 2);
+
+    //     // Transmission Summary
+    //     $this->info("=== TRANSMISSION COMPLETE ===");
+    //     $this->info("Processing time: {$processingTime} seconds");
+    //     $this->info("Successful sends: {$successfulSends}");
+    //     $this->info("Failed sends: {$failedSends}");
+    //     $this->info("Success rate: " . round(($successfulSends / $filteredResults->count()) * 100, 1) . "%");
+
+    //     // Create transmission summary log entry
+    //     $this->createTransmissionSummary([
+    //         'total_filtered_transactions' => $filteredResults->count(),
+    //         'successful_sends' => $successfulSends,
+    //         'failed_sends' => $failedSends,
+    //         'processing_time_seconds' => $processingTime,
+    //         'success_rate_percent' => round(($successfulSends / $filteredResults->count()) * 100, 1),
+    //         'errors' => $errors
+    //     ]);
+
+    //     // Log errors to Laravel log
+    //     foreach ($errors as $error) {
+    //         \Log::error("Individual transaction transmission error: " . $error);
+    //     }
+    // }
     private function sendIndividualTransactions(Collection $filteredResults): void
     {
-        $this->info("=== SENDING INDIVIDUAL TRANSACTIONS ===");
-
         $accountingUrl = config('accounting.endpoint_url', 'https://www.castlebet.darth.bond/api/fnb53nmb');
         $successfulSends = 0;
         $failedSends = 0;
+        $duplicateSkips = 0;
         $errors = [];
         $startTime = microtime(true);
 
+        // Track sent transactions to prevent duplicates based on transaction_id + amount + datetime
+        $sentTransactionHashes = [];
+
         foreach ($filteredResults as $index => $transaction) {
             try {
+                $transactionId = $transaction['transaction_id'] ?? null;
+                $amount = floatval($transaction['amount'] ?? 0);
+                $transactionDate = $transaction['transaction_date'];
+                $transactionTime = $transaction['transaction_time'] ?? '00:00:00';
+
+                // Create a composite hash for transaction_id + amount + date + time combination
+                $compositeHash = md5($transactionId . '|' . $amount . '|' . $transactionDate . '|' . $transactionTime);
+
+                // Check for duplicate transaction_id + amount + date/time combination
+                if (in_array($compositeHash, $sentTransactionHashes)) {
+                    $duplicateSkips++;
+                    $this->line("[" . ($index + 1) . "/{$filteredResults->count()}] Skipping duplicate: {$transactionId} - Amount: {$amount}, DateTime: {$transactionDate} {$transactionTime}");
+                    continue;
+                }
+
+                // Add to sent transactions tracker
+                $sentTransactionHashes[] = $compositeHash;
+
+                // Format time properly (remove the extra space, ensure proper formatting)
+                $formattedTime = $transactionDate . ' ' . $transactionTime;
+
                 // Prepare individual transaction payload with "username" instead of "msisdn"
                 $payload = [
                     'username' => $transaction['mobile_number'] ?? null,
                     'amount' => floatval($transaction['amount'] ?? 0),
-                    'transactionid' => $transaction['transaction_id'] ?? null,
-                    'time' => $transaction['transaction_date'] . 'T' . ($transaction['transaction_time'] ?? '00:00:00')
+                    'transactionid' => $transactionId,
+                    'time' => $formattedTime
                 ];
 
                 // Remove null/empty values
-                $payload = array_filter($payload, function($value) {
+                $payload = array_filter($payload, function ($value) {
                     return $value !== null && $value !== '';
                 });
 
-                $this->line("  → [($index + 1)/{$filteredResults->count()}] Sending {$transaction['transaction_id']}...");
+                $this->line("[" . ($index + 1) . "/{$filteredResults->count()}] Sending {$transactionId}...");
 
                 // Send individual transaction
                 $response = Http::timeout(15)
@@ -556,21 +671,21 @@ class ParseDatFilesCommand extends Command
                     ->withHeaders([
                         'Content-Type' => 'application/json',
                         'Accept' => 'application/json',
-                        'X-Transaction-ID' => $transaction['transaction_id'],
+                        'X-Transaction-ID' => $transactionId,
                     ])
                     ->post($accountingUrl, $payload);
 
                 if ($response->successful()) {
                     $successfulSends++;
-                    $this->line("    ✓ Success ({$response->status()})");
+                    $this->line("Success ({$response->status()})");
 
                     // Log successful transaction
                     $this->logIndividualTransaction('SUCCESS', $transaction, $payload, $response->json());
                 } else {
                     $failedSends++;
                     $errorMsg = "HTTP {$response->status()}: " . $response->body();
-                    $errors[] = "Transaction {$transaction['transaction_id']}: {$errorMsg}";
-                    $this->line("    ✗ Failed: {$errorMsg}");
+                    $errors[] = "Transaction {$transactionId}: {$errorMsg}";
+                    $this->line("Failed: {$errorMsg}");
 
                     // Log failed transaction
                     $this->logIndividualTransaction('FAILED', $transaction, $payload, null, $errorMsg);
@@ -584,7 +699,7 @@ class ParseDatFilesCommand extends Command
             } catch (\Exception $e) {
                 $failedSends++;
                 $errorMsg = "Exception: " . $e->getMessage();
-                $errors[] = "Transaction {$transaction['transaction_id']}: {$errorMsg}";
+                $errors[] = "Transaction {$transactionId}: {$errorMsg}";
                 $this->error("    ✗ {$errorMsg}");
 
                 // Log exception
@@ -593,21 +708,30 @@ class ParseDatFilesCommand extends Command
         }
 
         $processingTime = round(microtime(true) - $startTime, 2);
+        $actualProcessed = $filteredResults->count() - $duplicateSkips;
 
         // Transmission Summary
         $this->info("=== TRANSMISSION COMPLETE ===");
         $this->info("Processing time: {$processingTime} seconds");
+        $this->info("Total transactions: {$filteredResults->count()}");
+        $this->info("Duplicate transactions skipped: {$duplicateSkips}");
+        $this->info("Transactions processed: {$actualProcessed}");
         $this->info("Successful sends: {$successfulSends}");
         $this->info("Failed sends: {$failedSends}");
-        $this->info("Success rate: " . round(($successfulSends / $filteredResults->count()) * 100, 1) . "%");
+
+        if ($actualProcessed > 0) {
+            $this->info("Success rate: " . round(($successfulSends / $actualProcessed) * 100, 1) . "%");
+        }
 
         // Create transmission summary log entry
         $this->createTransmissionSummary([
             'total_filtered_transactions' => $filteredResults->count(),
+            'duplicate_transactions_skipped' => $duplicateSkips,
+            'transactions_processed' => $actualProcessed,
             'successful_sends' => $successfulSends,
             'failed_sends' => $failedSends,
             'processing_time_seconds' => $processingTime,
-            'success_rate_percent' => round(($successfulSends / $filteredResults->count()) * 100, 1),
+            'success_rate_percent' => $actualProcessed > 0 ? round(($successfulSends / $actualProcessed) * 100, 1) : 0,
             'errors' => $errors
         ]);
 
@@ -617,7 +741,8 @@ class ParseDatFilesCommand extends Command
         }
     }
 
-         /**
+
+    /**
      * Filter transactions for current/recent data only
      */
     private function filterCurrentTransactions(Collection $results): Collection
