@@ -436,10 +436,12 @@ class MessageController extends Controller
      */
     private function exportToCsv(LazyCollection $data, string $dateFilter)
     {
-        $filename = ($dateFilter ?: 'all') . '.csv';
+        // $filename = ($dateFilter ?: 'all') . '.csv';
+
+        $filename = preg_replace('/\.csv$/', '', $dateFilter ?: 'all') . '.csv';
 
         $headers = [
-            'Content-Type' => 'application/csv',
+            'Content-Type' => 'applciation/csv',
             'Content-Disposition' => 'attachment; filename="' . $filename . '"',
         ];
 
