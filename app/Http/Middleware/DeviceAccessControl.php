@@ -6,6 +6,7 @@ namespace App\Http\Middleware;
 use App\Services\DeviceAccessService;
 use Cache;
 use Closure;
+use Http;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Log;
@@ -21,16 +22,11 @@ class DeviceAccessControl
         $clientIP = $this->getClientIP($request);
         $cacheKey = "device_access_" . md5($clientIP);
 
-         Cache::forget($cacheKey);
+        //  Cache::forget($cacheKey);
         // Check cache first to avoid repeated JAR execution
         $isAllowed = Cache::remember($cacheKey, 300, function () use ($clientIP) {
             return $this->checkDeviceAccess($clientIP);
         });
-
-
-
-
-
 
         if (!$isAllowed) {
             Log::warning("Device access denied", ['ip' => $clientIP]);
@@ -73,59 +69,20 @@ class DeviceAccessControl
      */
     private function checkDeviceAccess(string $clientIP): bool
     {
-
         try {
-            $jarPath = resource_path('jars/DeviceAccessControl.jar');
-            $configPath = resource_path('config/access-control.conf');
+            $url = "http://127.0.0.1:8081/api/check-ip?ip=" . urlencode($clientIP);
+            $response = Http::timeout(2)->get($url);
 
-            if (!file_exists($jarPath)) {
-                Log::error("JAR file not found: $jarPath");
+            if ($response->failed()) {
+                Log::error("Failed to contact IP service", ['ip' => $clientIP]);
                 return false;
             }
 
-            // Execute JAR with IP parameter
-            $command = sprintf(
-                'java -jar %s --check-ip %s --config %s 2>&1',
-                escapeshellarg($jarPath),
-                escapeshellarg($clientIP),
-                escapeshellarg($configPath)
-            );
-
-            // $output = shell_exec($command);
-            // $exitCode = $this->getLastExitCode();
-
-            exec($command, $output, $exitCode);
-            $output = implode("\n", $output);
-
-            Log::info("JAR Output", ['output' => $output]);
-
-
-            Log::info("Device access check", [
-                'ip' => $clientIP,
-                'command' => $command,
-                'output' => $output,
-                'exit_code' => $exitCode
-            ]);
-
-            // Exit code 0 = allowed, 1 = denied
-            return $exitCode === 0;
-
+            return $response->json('allowed', false);
         } catch (\Exception $e) {
-            Log::error("Error checking device access", [
-                'ip' => $clientIP,
-                'error' => $e->getMessage()
-            ]);
-
-            return false; // Deny access on error
+            Log::error("Error contacting IP service", ['error' => $e->getMessage()]);
+            return false;
         }
-    }
-
-    /**
-     * Get the exit code of the last executed command
-     */
-    private function getLastExitCode(): int
-    {
-        return (int) shell_exec('echo $?');
     }
 
 }

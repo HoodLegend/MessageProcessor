@@ -462,10 +462,11 @@ class ParseDatFilesCommand extends Command
     private function saveAllDataToCsv(Collection $results, string $directory): void
     {
         $this->info("SAVING ALL DATA TO CSV FILES");
-
         $groupedByDate = $results->groupBy('transaction_date');
         $totalFiles = 0;
         $totalRecords = 0;
+        $duplicatesSkipped = 0;
+        $startTime = microtime(true);
 
         foreach ($groupedByDate as $date => $dateRecords) {
             try {
@@ -474,22 +475,56 @@ class ParseDatFilesCommand extends Command
 
                 // Prepare CSV data for this date
                 $csvData = [];
+                $existingTransactionHashes = [];
 
                 // Check if file already exists and load existing data
                 if (Storage::exists($filePath)) {
                     $existingContent = Storage::get($filePath);
                     $existingLines = explode("\n", trim($existingContent));
+
                     if (!empty($existingLines) && strpos($existingLines[0], 'Transaction Date') !== false) {
                         array_shift($existingLines); // Remove header
                     }
-                    $csvData = array_filter(array_map('str_getcsv', $existingLines));
+
+                    // Parse existing data and create hash lookup for duplicates
+                    foreach ($existingLines as $line) {
+                        if (!empty(trim($line))) {
+                            $row = str_getcsv($line);
+                            if (count($row) >= 5) { // Ensure we have all required columns
+                                $csvData[] = $row;
+
+                                // Create hash for duplicate detection: transaction_id + amount + date + time
+                                $hash = md5($row[4] . '|' . $row[2] . '|' . $row[0] . '|' . $row[1]); // transaction_id|amount|date|time
+                                $existingTransactionHashes[] = $hash;
+                            }
+                        }
+                    }
                 } else {
                     // Add header for new file
                     $csvData[] = ['Transaction Date', 'Transaction Time', 'Amount', 'Mobile Number', 'Transaction ID'];
                 }
 
-                // Add new records to CSV data
+                // Track new records added for this file
+                $newRecordsCount = 0;
+                $fileStartRecordCount = count($csvData) - (empty($existingTransactionHashes) ? 1 : 0); // Subtract header if new file
+
+                // Add new records to CSV data (only if not duplicates)
                 foreach ($dateRecords as $record) {
+                    // Create hash for this new record
+                    $newRecordHash = md5(
+                        ($record['transaction_id'] ?? 'N/A') . '|' .
+                        ($record['amount'] ?? 'N/A') . '|' .
+                        ($record['transaction_date'] ?? 'N/A') . '|' .
+                        ($record['transaction_time'] ?? 'N/A')
+                    );
+
+                    // Check if this record already exists
+                    if (in_array($newRecordHash, $existingTransactionHashes)) {
+                        $duplicatesSkipped++;
+                        continue; // Skip duplicate
+                    }
+
+                    // Add new record
                     $csvData[] = [
                         $record['transaction_date'] ?? 'N/A',
                         $record['transaction_time'] ?? 'N/A',
@@ -497,17 +532,25 @@ class ParseDatFilesCommand extends Command
                         $record['mobile_number'] ?? 'N/A',
                         $record['transaction_id'] ?? 'N/A'
                     ];
+
+                    // Add to existing hashes to prevent duplicates within same batch
+                    $existingTransactionHashes[] = $newRecordHash;
+                    $newRecordsCount++;
                 }
 
-                // Convert to CSV string and save
-                $csvString = $this->arrayToCsv($csvData);
-
-                if (Storage::put($filePath, $csvString)) {
-                    $totalFiles++;
-                    $totalRecords += $dateRecords->count();
-                    $this->info("Saved {$dateRecords->count()} records to {$filename}");
+                // Only save if we have new records to add
+                if ($newRecordsCount > 0) {
+                    // Convert to CSV string and save
+                    $csvString = $this->arrayToCsv($csvData);
+                    if (Storage::put($filePath, $csvString)) {
+                        $totalFiles++;
+                        $totalRecords += $newRecordsCount;
+                        $this->info("Saved {$newRecordsCount} new records to {$filename} (total in file: " . (count($csvData) - 1) . ")");
+                    } else {
+                        $this->error("Failed to save {$filename}");
+                    }
                 } else {
-                    $this->error("Failed to save {$filename}");
+                    $this->line("No new records for {$filename} - all records already exist");
                 }
 
             } catch (\Exception $e) {
@@ -515,8 +558,18 @@ class ParseDatFilesCommand extends Command
             }
         }
 
-        $this->info("CSV Save Summary: {$totalFiles} files, {$totalRecords} total records saved");
+        $processingTime = round(microtime(true) - $startTime, 2);
+
+        $this->info("\n" . str_repeat('=', 50));
+        $this->info("CSV SAVE SUMMARY");
+        $this->info(str_repeat('=', 50));
+        $this->info("Files updated: {$totalFiles}");
+        $this->info("New records saved: {$totalRecords}");
+        $this->info("Duplicate records skipped: {$duplicatesSkipped}");
+        $this->info("Processing time: {$processingTime} seconds");
+        $this->info(str_repeat('=', 50));
     }
+
 
 
     /**
@@ -954,7 +1007,7 @@ class ParseDatFilesCommand extends Command
     }
 
     /**
-     * Send CSV data to accounting software
+     * Send CSV data to accounting software url
      */
     private function sendToAccountingSoftware(string $csvContent, string $filename, Collection $records): array
     {

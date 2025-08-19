@@ -173,6 +173,9 @@ const initializeDataTable = () => {
     dataTable.value = $('#transactionsTable').DataTable({
         processing: true,
         serverSide: true,
+        headers:{
+            'X-CSRF-TOKEN': $('meta[name="csrf-token"]')?.attr('content')
+        },
         ajax: {
             url: route('transactions.data'),
             type: 'POST',
