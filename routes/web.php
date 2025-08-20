@@ -33,7 +33,7 @@ Route::middleware(['auth', "device-access"])->group(function () {
 
 Route::get('/csrf-token', function () {
     return response()->json(['csrf_token' => csrf_token()]);
-});
+})->middleware("auth");
 
 
 Route::middleware(['auth', 'verified', 'device-access'])->group(function () {
