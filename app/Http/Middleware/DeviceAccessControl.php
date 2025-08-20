@@ -70,7 +70,7 @@ class DeviceAccessControl
     private function checkDeviceAccess(string $clientIP): bool
     {
         try {
-            $url = "http://127.0.0.1:8081/api/check-ip?ip=" . urlencode($clientIP);
+            $url = "http://127.0.0.1:8081/api/v1/check-ip?ip=" . urlencode($clientIP);
             $response = Http::timeout(2)->get($url);
 
             if ($response->failed()) {
