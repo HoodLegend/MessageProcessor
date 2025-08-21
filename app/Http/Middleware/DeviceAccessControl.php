@@ -17,19 +17,24 @@ class DeviceAccessControl
  /**
      * Handle an incoming request.
      */
-    public function handle(Request $request, Closure $next)
+        public function handle(Request $request, Closure $next)
     {
         $clientIP = $this->getClientIP($request);
-        $cacheKey = "device_access_" . md5($clientIP);
+        $apiKey = $this->getApiKey($request); // Optional: get from header or session
 
-        //  Cache::forget($cacheKey);
-        // Check cache first to avoid repeated JAR execution
-        $isAllowed = Cache::remember($cacheKey, 300, function () use ($clientIP) {
-            return $this->checkDeviceAccess($clientIP);
+        $cacheKey = "device_access_" . md5($clientIP . ($apiKey ?? ''));
+
+        // Cache for 5 minutes to avoid repeated JAR calls
+        $isAllowed = Cache::remember($cacheKey, 300, function () use ($clientIP, $apiKey) {
+            return $this->checkDeviceAccess($clientIP, $apiKey);
         });
 
         if (!$isAllowed) {
-            Log::warning("Device access denied", ['ip' => $clientIP]);
+            Log::warning("Device access denied", [
+                'ip' => $clientIP,
+                'has_api_key' => !empty($apiKey),
+                'user_agent' => $request->userAgent()
+            ]);
 
             return Inertia::render("ErrorPage", [
                 'error' => 'Access Denied',
@@ -41,8 +46,7 @@ class DeviceAccessControl
     }
 
 
-
-    /**
+/**
      * Get client IP address handling proxies
      */
     private function getClientIP(Request $request): string
@@ -57,7 +61,8 @@ class DeviceAccessControl
         foreach ($headers as $header) {
             $ip = $request->server($header);
             if (!empty($ip) && $ip !== 'unknown') {
-                return explode(',', $ip)[0];
+                // Handle comma-separated IPs (X-Forwarded-For)
+                return trim(explode(',', $ip)[0]);
             }
         }
 
@@ -65,22 +70,63 @@ class DeviceAccessControl
     }
 
     /**
+     * Get API key from request (optional - for future use)
+     */
+    private function getApiKey(Request $request): ?string
+    {
+        // Check header first
+        $apiKey = $request->header('X-API-KEY');
+
+        // Fallback to session or bearer token if needed
+        if (empty($apiKey)) {
+            $apiKey = $request->session()->get('api_key');
+        }
+
+        return $apiKey;
+    }
+
+    /**
      * Execute JAR file to check device access
      */
-    private function checkDeviceAccess(string $clientIP): bool
+     private function checkDeviceAccess(string $clientIP, ?string $apiKey = null): bool
     {
         try {
-            $url = "http://127.0.0.1:8081/api/v1/check-ip?ip=" . urlencode($clientIP);
-            $response = Http::timeout(2)->get($url);
+            $baseUrl = config('services.access_control.url', 'http://127.0.0.1:8081');
+
+            if ($apiKey) {
+                // Use full access check if API key is present
+                $response = Http::timeout(3)
+                    ->post($baseUrl . '/api/v1/check-access', [
+                        'ip' => $clientIP,
+                        'apiKey' => $apiKey
+                    ]);
+            } else {
+                // Use IP-only check (current behavior)
+                $response = Http::timeout(3)
+                    ->get($baseUrl . '/api/v1/check-ip', [
+                        'ip' => $clientIP
+                    ]);
+            }
 
             if ($response->failed()) {
-                Log::error("Failed to contact IP service", ['ip' => $clientIP]);
+                Log::error("Access control service failed", [
+                    'ip' => $clientIP,
+                    'status' => $response->status(),
+                    'response' => $response->body()
+                ]);
                 return false;
             }
 
-            return $response->json('allowed', false);
+            $result = $response->json();
+            return $result['allowed'] ?? false;
+
         } catch (\Exception $e) {
-            Log::error("Error contacting IP service", ['error' => $e->getMessage()]);
+            Log::error("Error contacting access control service", [
+                'ip' => $clientIP,
+                'error' => $e->getMessage()
+            ]);
+
+            // Fail closed for security
             return false;
         }
     }
