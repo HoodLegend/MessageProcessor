@@ -20,10 +20,10 @@ return [
         'development' => env('DEVICE_API_KEY_DEV', 'dev_key_mno345pqr678stu901'),
 
         // Mobile app specific (if needed)
-        'mobile' => env('DEVICE_API_KEY_MOBILE', 'dvKh2mgtWwl4nUd26CaaCNfJwwNlY0fi//Bqsc24LpY='),
+        'mobile' => env('DEVICE_API_KEY_MOBILE', 'S6udUmoxc8DxhO33lNRDL339otMAXYaj'),
 
         // Web client specific (if needed)
-        'web' => env('DEVICE_API_KEY_WEB', 'CJ4E9NM7DbxjM80QMcLO64enWkPGTdTZXbcwevRG8YI='),
+        'web' => env('DEVICE_API_KEY_WEB', '9WNmRzYtqOPGXCyCp70VTJojwKmHcsOz'),
     ],
 
     /*
