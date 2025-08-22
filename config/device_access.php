@@ -11,16 +11,16 @@ return [
 
     'api_keys' => [
         // Production environment
-        'production' => env('DEVICE_API_KEY_PROD', 'prod_key_abc123def456ghi789'),
+        'production' => env('DEVICE_API_KEY_PROD', 'S6udUmoxc8DxhO33lNRDL339otMAXYaj'),
 
         // Staging environment
-        'staging' => env('DEVICE_API_KEY_STAGING', 'staging_key_xyz789uvw456rst123'),
+        // 'staging' => env('DEVICE_API_KEY_STAGING', 'staging_key_xyz789uvw456rst123'),
 
         // Development environment
         'development' => env('DEVICE_API_KEY_DEV', 'dev_key_mno345pqr678stu901'),
 
         // Mobile app specific (if needed)
-        'mobile' => env('DEVICE_API_KEY_MOBILE', 'S6udUmoxc8DxhO33lNRDL339otMAXYaj'),
+        'mobile' => env('DEVICE_API_KEY_MOBILE', 'MEe2vKHLa76tE6MD2BnkzEsXmbPbgkzE'),
 
         // Web client specific (if needed)
         'web' => env('DEVICE_API_KEY_WEB', '9WNmRzYtqOPGXCyCp70VTJojwKmHcsOz'),
