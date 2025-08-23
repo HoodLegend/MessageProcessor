@@ -89,7 +89,15 @@ class DeviceAccessControl
     {
         // Get the appropriate API key for current environment
         $apiKeyCallback = config('device_access.current_api_key');
-        return is_callable($apiKeyCallback) ? $apiKeyCallback() : $apiKeyCallback;
+        $apiKey = is_callable($apiKeyCallback) ? $apiKeyCallback() : $apiKeyCallback;
+           Log::info("getApiKey Debug", [
+        'environment' => app()->environment(),
+        'callback_type' => is_callable($apiKeyCallback) ? 'callable' : 'not_callable',
+        'api_key' => $apiKey,
+        'api_key_type' => gettype($apiKey),
+        'api_key_length' => strlen($apiKey ?? ''),
+    ]);
+        return $apiKey;
     }
 
 
