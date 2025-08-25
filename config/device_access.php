@@ -13,8 +13,8 @@ return [
         // Production environment
         'production' => env('DEVICE_API_KEY_PROD', 'S6udUmoxc8DxhO33lNRDL339otMAXYaj'),
 
-        // Staging environment
-        // 'staging' => env('DEVICE_API_KEY_STAGING', 'staging_key_xyz789uvw456rst123'),
+        // Local environment
+        'local' => env('DEVICE_API_KEY_LOCAL', 'Uyims9jWJHWz0VQHj47R2ctFa0eXfHSo'),
 
         // Development environment
         'development' => env('DEVICE_API_KEY_DEV', 'dev_key_mno345pqr678stu901'),
@@ -37,6 +37,10 @@ return [
     'current_api_key' => function() {
         $environment = app()->environment();
         $keys = config('device_access.api_keys');
+
+        if ($environment === 'local') {
+        return $keys['production']; // Use production key for local
+    }
 
         return $keys[$environment] ?? $keys['production'];
     },
