@@ -19,11 +19,14 @@ return [
         // Development environment
         'development' => env('DEVICE_API_KEY_DEV', 'dev_key_mno345pqr678stu901'),
 
-        // Mobile app specific (if needed)
+        // Mobile app specific
         'mobile' => env('DEVICE_API_KEY_MOBILE', 'MEe2vKHLa76tE6MD2BnkzEsXmbPbgkzE'),
 
-        // Web client specific (if needed)
+        // Web client specific
         'web' => env('DEVICE_API_KEY_WEB', '9WNmRzYtqOPGXCyCp70VTJojwKmHcsOz'),
+
+        // Api Client specific
+        'api' => env('DEVICE_API_KEY_API', 'eUE1JF7zbwDvlhE9IAy2vAMCBwcUNCPs')
     ],
 
     /*
