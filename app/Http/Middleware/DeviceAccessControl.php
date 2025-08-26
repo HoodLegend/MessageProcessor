@@ -69,8 +69,9 @@ class DeviceAccessControl
         }
 
         // Fallback to environment-based key
-        $environment = app()->environment();
-        return $apiKeys[$environment] ?? $apiKeys['production'] ?? null;
+        // $environment = app()->environment();
+        // return $apiKeys[$environment] ?? $apiKeys['production'] ?? null;
+        return null;
     }
 
     /**
