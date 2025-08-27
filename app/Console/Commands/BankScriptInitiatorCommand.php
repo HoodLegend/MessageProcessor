@@ -190,7 +190,7 @@ class BankScriptInitiatorCommand extends Command
             $newFiles = $filesAfter - $filesBefore;
 
             $this->newLine();
-            $this->info('✓ Download completed successfully!');
+            $this->info('Download completed successfully!');
             $this->info("Files before: {$filesBefore}");
             $this->info("Files after: {$filesAfter}");
             $this->info("New files downloaded: {$newFiles}");
@@ -203,7 +203,7 @@ class BankScriptInitiatorCommand extends Command
 
             return self::SUCCESS;
         } else {
-            $this->error('✗ Download failed!');
+            $this->error('Download failed!');
             $this->error('Error: ' . $result['error']);
 
             if (!empty($result['output'])) {
