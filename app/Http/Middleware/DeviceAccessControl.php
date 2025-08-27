@@ -47,51 +47,41 @@ class DeviceAccessControl
         return $next($request);
     }
 
+
+
+
     /**
      * Get device-specific API key
-    //  */
-    // private function getDeviceApiKey(Request $request): ?string
-    // {
-    //     // 1. Check for explicit API key in headers (highest priority)
-    //     $headerKey = $request->header('X-Device-API-Key') ?? $request->header('Authorization');
-    //     if ($headerKey) {
-    //         // Remove "Bearer " prefix if present
-    //         return str_replace('Bearer ', '', $headerKey);
-    //     }
-
-    //     // 2. Detect device type and get appropriate key
-    //     $deviceType = $this->detectDeviceType($request);
-    //     $apiKeys = config('device_access.api_keys', []);
-
-    //     // Try device-specific key first
-    //     if (isset($apiKeys[$deviceType])) {
-    //         return $apiKeys[$deviceType];
-    //     }
-
-    //     // Fallback to environment-based key
-    //     // $environment = app()->environment();
-    //     // return $apiKeys[$environment] ?? $apiKeys['production'] ?? null;
-    //     return null;
-    // }
-
+    */
     private function getDeviceApiKey(Request $request): ?string
-{
-    // Only accept API keys from headers
-    $headerKey = $request->header('X-Device-API-Key') ?? $request->header('Authorization');
+    {
+        // 1. Check for explicit API key in headers (highest priority)
+        $headerKey = $request->header('X-Device-API-Key') ?? $request->header('Authorization');
+        if ($headerKey) {
+            $cleanKey = str_replace('Bearer ', '', $headerKey);
+            Log::info("Using API key from header", ['key_length' => strlen($cleanKey)]);
+            return $cleanKey;
+        }
 
-    if ($headerKey) {
-        return str_replace('Bearer ', '', $headerKey);
+        // 2. Detect device type and get appropriate key
+        $deviceType = $this->detectDeviceType($request);
+        $apiKeys = config('device_access.api_keys', []);
+
+        Log::info("Device type detected", [
+            'device_type' => $deviceType,
+            'available_keys' => array_keys($apiKeys)
+        ]);
+
+        // Return device-specific key
+        return $apiKeys[$deviceType] ?? null;
     }
 
-    // No fallback – if no header, return null
-    return null;
-}
 
 
     /**
      * Detect device type from user agent
      */
-    private function detectDeviceType(Request $request): string
+private function detectDeviceType(Request $request): string
     {
         $userAgent = strtolower($request->userAgent() ?? '');
 
@@ -111,8 +101,9 @@ class DeviceAccessControl
         }
 
         // Default fallback
-        return app()->environment();
+        return 'web';
     }
+
 
     /**
      * Get client IP address handling proxies

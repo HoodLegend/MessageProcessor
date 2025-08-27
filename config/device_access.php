@@ -29,6 +29,7 @@ return [
         'api' => env('DEVICE_API_KEY_API', 'eUE1JF7zbwDvlhE9IAy2vAMCBwcUNCPs')
     ],
 
+
     /*
     |--------------------------------------------------------------------------
     | Current Environment API Key
