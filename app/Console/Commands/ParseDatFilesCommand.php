@@ -453,7 +453,7 @@ class ParseDatFilesCommand extends Command
         $this->logFilteringStats($results, $filteredResults);
 
         // send filtered data as individual JSON transactions
-        $this->sendIndividualTransactions($filteredResults);
+        // $this->sendIndividualTransactions($filteredResults);
     }
 
     /**
