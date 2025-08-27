@@ -10,18 +10,18 @@ Artisan::command('inspire', function () {
 
 
 
-// Schedule::command('messages:download --memory-limit=256M')
-//     ->everyThirtyMinutes()
-//     ->withoutOverlapping(1800) // 30-minute overlap protection
-//     ->runInBackground()
-//     // ->sendOutputTo(storage_path('logs/message_downloads.log'))
-//     // ->emailOutputOnFailure(['admin@example.com']) // Optional: email on failure
-//     ->onSuccess(function () {
-//         \Log::info('Message download completed successfully');
-//     })
-//     ->onFailure(function () {
-//         \Log::error('Message download failed');
-//     });
+Schedule::command('messages:download --memory-limit=256M')
+    ->everyThirtyMinutes()
+    ->withoutOverlapping(1800) // 30-minute overlap protection
+    ->runInBackground()
+    // ->sendOutputTo(storage_path('logs/message_downloads.log'))
+    // ->emailOutputOnFailure(['admin@example.com']) // Optional: email on failure
+    ->onSuccess(function () {
+        \Log::info('Message download completed successfully');
+    })
+    ->onFailure(function () {
+        \Log::error('Message download failed');
+    });
 
 // Schedule::command('device:whitelist {ip}')
 //     ->everyMinute()
