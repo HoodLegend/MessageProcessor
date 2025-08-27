@@ -922,10 +922,10 @@ class ParseDatFilesCommand extends Command
                     $files++;
                     $records += $dateRecords->count();
 
-                    $sendResult = $this->sendToAccountingSoftware($csvString, $filename, $dateRecords);
-                    if ($sendResult['success']) {
-                        $successful++;
-                    }
+                    // $sendResult = $this->sendToAccountingSoftware($csvString, $filename, $dateRecords);
+                    // if ($sendResult['success']) {
+                    //     $successful++;
+                    // }
                 }
             } catch (\Exception $e) {
                 $errors[] = "Error processing {$date}: " . $e->getMessage();
