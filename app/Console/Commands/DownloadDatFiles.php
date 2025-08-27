@@ -28,7 +28,7 @@ class DownloadDatFiles extends Command
     public function handle()
     {
         // Updated source path to messages folder
-    $sourcePath = '/var/www/fnb/nam/ReceiptItClient/download/';
+    $sourcePath = '/var/www/fnb/nam/ReceiptItClient/messages/';
     $copyMode = $this->option('copy');
     $batchSize = $this->option('batch-size'); // Process files in batches
 
