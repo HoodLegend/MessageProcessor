@@ -366,9 +366,18 @@ const formatTime = (timeString) => {
         return cleanTime
     }
 
-    // Numeric only, e.g. 30, 3056, 123456
+    // Numeric only
     if (/^\d+$/.test(cleanTime)) {
-        // Pad to 6 digits (HHmmss)
+        // For 4 digits, check if first two digits are valid hours (00-23)
+        if (cleanTime.length === 4) {
+            const firstTwo = parseInt(cleanTime.substring(0, 2))
+            if (firstTwo > 23) {
+                // Treat as mmss (e.g., "3056" = "00:30:56")
+                return `00:${cleanTime.substring(0, 2)}:${cleanTime.substring(2, 4)}`
+            }
+        }
+
+        // Default: pad to 6 digits and format as HHmmss
         cleanTime = cleanTime.padStart(6, '0')
         const hours = cleanTime.substring(0, 2)
         const minutes = cleanTime.substring(2, 4)
@@ -376,7 +385,6 @@ const formatTime = (timeString) => {
         return `${hours}:${minutes}:${seconds}`
     }
 
-    // If not recognized, just return raw
     return timeString
 }
 
