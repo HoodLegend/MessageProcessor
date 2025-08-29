@@ -269,6 +269,13 @@ const onDateChange = () => {
         selectedDate.value = '';
     }
 
+    if (
+        selectedDate.value &&
+        !props.availableDates.some(d => d.value === selectedDate.value)
+    ) {
+        selectedDate.value = ''
+    }
+
     // Reload the DataTable with new date filter
     if (dataTable.value) {
         dataTable.value.ajax.reload(() => {
