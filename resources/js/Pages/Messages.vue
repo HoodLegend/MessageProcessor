@@ -266,14 +266,14 @@ const onDateChange = () => {
 
     // display all Dates by default if not available dates exist.
     if (!props.availableDates.length) {
-        selectedDate.value = '';
+        selectedDate.value = 'No Dates Available';
     }
 
     if (
         selectedDate.value &&
         !props.availableDates.some(d => d.value === selectedDate.value)
     ) {
-        selectedDate.value = ''
+        selectedDate.value = 'No Dates Available'
     }
 
     // Reload the DataTable with new date filter
@@ -359,34 +359,32 @@ const formatDisplayDate = (dateString) => {
 const formatTime = (timeString) => {
     if (!timeString || timeString === 'N/A') return 'N/A'
 
-    let cleanTime = timeString.toString().trim()
+    const clean = timeString.toString().trim()
 
-    // Already formatted HH:mm:ss
-    if (/^\d{2}:\d{2}:\d{2}$/.test(cleanTime)) {
-        return cleanTime
+    // Case: already formatted
+    if (/^\d{2}:\d{2}:\d{2}$/.test(clean)) {
+        return clean
     }
 
-    // Numeric only
-    if (/^\d+$/.test(cleanTime)) {
-        // For 4 digits, check if first two digits are valid hours (00-23)
-        if (cleanTime.length === 4) {
-            const firstTwo = parseInt(cleanTime.substring(0, 2))
-            if (firstTwo > 23) {
-                // Treat as mmss (e.g., "3056" = "00:30:56")
-                return `00:${cleanTime.substring(0, 2)}:${cleanTime.substring(2, 4)}`
-            }
-        }
+    // Case: HHMMSS (6 digits)
+    if (/^\d{6}$/.test(clean)) {
+        const h = clean.slice(0, 2)
+        const m = clean.slice(2, 4)
+        const s = clean.slice(4, 6)
+        return `${h}:${m}:${s}`
+    }
 
-        // Default: pad to 6 digits and format as HHmmss
-        cleanTime = cleanTime.padStart(6, '0')
-        const hours = cleanTime.substring(0, 2)
-        const minutes = cleanTime.substring(2, 4)
-        const seconds = cleanTime.substring(4, 6)
-        return `${hours}:${minutes}:${seconds}`
+    // Case: YYYYMMDDHHMMSSxx (length ≥ 14)
+    if (/^\d{14,}$/.test(clean)) {
+        const h = clean.slice(8, 10)
+        const m = clean.slice(10, 12)
+        const s = clean.slice(12, 14)
+        return `${h}:${m}:${s}`
     }
 
     return timeString
 }
+
 
 
 const formatAmount = (amount) => {

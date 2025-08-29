@@ -279,16 +279,35 @@ class ParseDatFilesCommand extends Command
 
 
     // Helper method to format time from HHMMSSS to HH:MM:SS
-    private function formatTime(string $timeString): string
-    {
-        if (strlen($timeString) >= 6) {
-            $hours = substr($timeString, 0, 2);
-            $minutes = substr($timeString, 2, 2);
-            $seconds = substr($timeString, 4, 2);
-            return "{$hours}:{$minutes}:{$seconds}";
-        }
-        return $timeString; // Return as-is if format is unexpected
+private function formatTime(string $timeString): string
+{
+    $timeString = trim($timeString);
+
+    // Case: already formatted HH:MM:SS
+    if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $timeString)) {
+        return $timeString;
     }
+
+    // Case: HHMMSS (6 digits only)
+    if (preg_match('/^\d{6}$/', $timeString)) {
+        $hours = substr($timeString, 0, 2);
+        $minutes = substr($timeString, 2, 2);
+        $seconds = substr($timeString, 4, 2);
+        return "{$hours}:{$minutes}:{$seconds}";
+    }
+
+    // Case: YYYYMMDDHHMMSS... (14+ digits, take from right part)
+    if (preg_match('/^\d{14,}$/', $timeString)) {
+        $hours = substr($timeString, 8, 2);
+        $minutes = substr($timeString, 10, 2);
+        $seconds = substr($timeString, 12, 2);
+        return "{$hours}:{$minutes}:{$seconds}";
+    }
+
+    // Fallback → return as-is
+    return $timeString;
+}
+
 
 
 
