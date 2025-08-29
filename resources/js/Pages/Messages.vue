@@ -1,4 +1,5 @@
 <template>
+
     <Head title="Transactions" />
     <AuthenticatedLayout>
         <!-- Header Section -->
@@ -10,12 +11,8 @@
                     <!-- Date Filter -->
                     <div class="flex items-center gap-2">
                         <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
-                        <select
-                            id="dateFilter"
-                            v-model="selectedDate"
-                            @change="onDateChange"
-                            class="form-select rounded border-gray-300 text-sm"
-                        >
+                        <select id="dateFilter" v-model="selectedDate" @change="onDateChange"
+                            class="form-select rounded border-gray-300 text-sm">
                             <option value="">All Dates</option>
                             <option v-for="date in availableDates" :key="date.value" :value="date.value">
                                 {{ date.label }} ({{ date.count }} records)
@@ -28,7 +25,8 @@
                         <button @click="refreshData" :disabled="loading"
                             class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2">
                             <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
+                                    stroke-width="4" />
                                 <path class="opacity-75" fill="currentColor"
                                     d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                             </svg>
@@ -51,7 +49,8 @@
             <!-- Info Bar -->
             <div class="bg-blue-50 border border-blue-200 text-blue-700 px-6 py-4 rounded mb-6">
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
-                    <div><strong>Selected Date:</strong> {{ selectedDate ? formatDisplayDate(selectedDate) : 'All Dates' }}</div>
+                    <div><strong>Selected Date:</strong> {{ selectedDate ? formatDisplayDate(selectedDate) : 'All Dates'
+                        }}</div>
                     <div><strong>Available Files:</strong> {{ availableDates.length }}</div>
                     <div><strong>Total Records:</strong> {{ totalRecords }}</div>
                     <div><strong>Last Updated:</strong> {{ lastUpdated }}</div>
@@ -60,24 +59,22 @@
 
             <!-- Date Range Quick Filters -->
             <div class="flex flex-wrap gap-2 mb-6">
-                <button
-                    v-for="quickFilter in quickFilters"
-                    :key="quickFilter.value"
-                    @click="applyQuickFilter(quickFilter.value)"
-                    :class="[
+                <button v-for="quickFilter in quickFilters" :key="quickFilter.value"
+                    @click="!quickFilter.disabled && applyQuickFilter(quickFilter.value)"
+                    :disabled="quickFilter.disabled" :class="[
                         'px-3 py-1 text-xs rounded-full border transition-colors',
                         quickFilter.active
                             ? 'bg-blue-100 border-blue-300 text-blue-700'
-                            : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
-                    ]"
-                >
+                            : quickFilter.disabled
+                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50'
+                                : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
+                    ]">
                     {{ quickFilter.label }}
                 </button>
             </div>
 
             <!-- Error Display -->
-            <div v-if="error"
-                class="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded mb-6">
+            <div v-if="error" class="bg-red-50 border border-red-200 text-red-700 px-6 py-4 rounded mb-6">
                 <p>{{ error }}</p>
             </div>
         </div>
@@ -158,7 +155,7 @@ const quickFilters = computed(() => {
     //     { label: 'This Month', value: thisMonth, active: selectedDate.value === thisMonth}
     // ]
 
-    return filters.map(f => ({
+    return quickFilters.map(f => ({
         ...f,
         disabled: f.value !== '' && !availableSet.has(f.value)
     }))
@@ -368,19 +365,25 @@ const formatTime = (timeString) => {
 
     let cleanTime = timeString.toString().trim()
 
+    // Already formatted HH:mm:ss
     if (/^\d{2}:\d{2}:\d{2}$/.test(cleanTime)) {
         return cleanTime
     }
 
-    if (/^\d{6}$/.test(cleanTime)) {
+    // Numeric only, e.g. 30, 3056, 123456
+    if (/^\d+$/.test(cleanTime)) {
+        // Pad to 6 digits (HHmmss)
+        cleanTime = cleanTime.padStart(6, '0')
         const hours = cleanTime.substring(0, 2)
         const minutes = cleanTime.substring(2, 4)
         const seconds = cleanTime.substring(4, 6)
         return `${hours}:${minutes}:${seconds}`
     }
 
+    // If not recognized, just return raw
     return timeString
 }
+
 
 const formatAmount = (amount) => {
     if (!amount || amount === 'N/A') return 'N/A'
