@@ -148,7 +148,7 @@ const quickFilters = computed(() => {
     const lastWeek = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0].replace(/-/g, '')
     const thisMonth = new Date().toISOString().slice(0, 7).replace('-', '');
 
-    const availableSet = new Set(props.availableDates.value.map(d => d.value));
+    const availableSet = new Set(props.availableDates.map(d => d.value));
 
     // return [
     //     { label: 'All', value: '', active: selectedDate.value === '' },
