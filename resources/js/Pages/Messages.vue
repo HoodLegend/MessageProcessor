@@ -59,16 +59,18 @@
 
             <!-- Date Range Quick Filters -->
             <div class="flex flex-wrap gap-2 mb-6">
-                <button v-for="quickFilter in quickFilters" :key="quickFilter.value"
-                    @click="!quickFilter.disabled && applyQuickFilter(quickFilter.value)"
-                    :disabled="quickFilter.disabled" :class="[
+and how should the button look like now this is my current implementation
+<button
+                    v-for="quickFilter in quickFilters"
+                    :key="quickFilter.value"
+                    @click="applyQuickFilter(quickFilter.value)"
+                    :class="[
                         'px-3 py-1 text-xs rounded-full border transition-colors',
                         quickFilter.active
                             ? 'bg-blue-100 border-blue-300 text-blue-700'
-                            : quickFilter.disabled
-                                ? 'bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-50'
-                                : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
-                    ]">
+                            : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
+                    ]"
+                >
                     {{ quickFilter.label }}
                 </button>
             </div>
@@ -144,21 +146,13 @@ const quickFilters = computed(() => {
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0].replace(/-/g, '')
     const lastWeek = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0].replace(/-/g, '')
     const thisMonth = new Date().toISOString().slice(0, 7).replace('-', '');
-
-    const availableSet = new Set(props.availableDates.map(d => d.value));
-
-    // return [
-    //     { label: 'All', value: '', active: selectedDate.value === '' },
-    //     { label: 'Today', value: today, active: selectedDate.value === today },
-    //     { label: 'Yesterday', value: yesterday, active: selectedDate.value === yesterday},
-    //     { label: 'Last 7 Days', value: lastWeek, active: selectedDate.value === lastWeek},
-    //     { label: 'This Month', value: thisMonth, active: selectedDate.value === thisMonth}
-    // ]
-
-    return quickFilters.map(f => ({
-        ...f,
-        disabled: f.value !== '' && !availableSet.has(f.value)
-    }))
+    return [
+        { label: 'All', value: '', active: selectedDate.value === '' },
+        { label: 'Today', value: today, active: selectedDate.value === today },
+        { label: 'Yesterday', value: yesterday, active: selectedDate.value === yesterday},
+        { label: 'Last 7 Days', value: lastWeek, active: selectedDate.value === lastWeek},
+        { label: 'This Month', value: thisMonth, active: selectedDate.value === thisMonth}
+    ]
 })
 
 const getCsrfToken = () => {
