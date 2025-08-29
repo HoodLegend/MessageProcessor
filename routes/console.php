@@ -23,9 +23,6 @@ Schedule::command('messages:download --memory-limit=256M')
         \Log::error('Message download failed');
     });
 
-// Schedule::command('device:whitelist {ip}')
-//     ->everyMinute()
-//     ->withoutOverlapping();
 
 Schedule::command('files:move-dat --copy --batch-size=100')
     ->everyFiveMinutes()
@@ -55,15 +52,3 @@ Schedule::command('files:parse-dat --output=csv --save')
     ->onFailure(function () {
         \Log::error('Scheduled message processing failed');
     });
-
-// Schedule::command('files:send-to-accounting --batch-size=15 --max-runtime=90')
-//     ->everyTwoMinutes()
-//     ->withoutOverlapping(900) // 15-minute overlap protection for network issues
-//     ->runInBackground()
-//     ->appendOutputTo(storage_path("logs/send_accounting.log"))
-//     ->onSuccess(function () {
-//         \Log::info('send-to-accounting completed at ' . now());
-//     })
-//     ->onFailure(function () {
-//         \Log::error('send-to-accounting failed at ' . now());
-//     });

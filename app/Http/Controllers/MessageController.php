@@ -43,8 +43,8 @@ class MessageController extends Controller
             $totalRecords = $this->getCachedTransactionCount($dateFilter);
             return response()->json([
                 'draw' => intval($draw),
-                'recordsTotal' => $totalRecords, // Optional: replace with real count from cache if needed
-                'recordsFiltered' => $totalRecords, // Same as above
+                'recordsTotal' => $totalRecords,
+                'recordsFiltered' => $totalRecords,
                 'data' => $data->toArray()
             ]);
 

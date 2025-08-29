@@ -146,14 +146,22 @@ const quickFilters = computed(() => {
     const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0].replace(/-/g, '')
     const lastWeek = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0].replace(/-/g, '')
+    const thisMonth = new Date().toISOString().slice(0, 7).replace('-', '');
 
-    return [
-        { label: 'All', value: '', active: selectedDate.value === '' },
-        { label: 'Today', value: today, active: selectedDate.value === today },
-        { label: 'Yesterday', value: yesterday, active: selectedDate.value === yesterday },
-        { label: 'Last 7 Days', value: 'last7', active: selectedDate.value === 'last7' },
-        { label: 'This Month', value: 'thisMonth', active: selectedDate.value === 'thisMonth' }
-    ]
+    const availableSet = new Set(availableDates.value.map(d => d.value));
+
+    // return [
+    //     { label: 'All', value: '', active: selectedDate.value === '' },
+    //     { label: 'Today', value: today, active: selectedDate.value === today },
+    //     { label: 'Yesterday', value: yesterday, active: selectedDate.value === yesterday},
+    //     { label: 'Last 7 Days', value: lastWeek, active: selectedDate.value === lastWeek},
+    //     { label: 'This Month', value: thisMonth, active: selectedDate.value === thisMonth}
+    // ]
+
+    return filters.map(f => ({
+        ...f,
+        disabled: f.value !== '' && !availableSet.has(f.value)
+    }))
 })
 
 const getCsrfToken = () => {
@@ -265,9 +273,15 @@ const initializeDataTable = () => {
     })
 }
 
+// listen for the date changes based on the filter selected.
 const onDateChange = () => {
-    loading.value = true
-    error.value = ''
+    loading.value = true;
+    error.value = '';
+
+    // display all Dates by default if not available dates exist.
+    if (!availableDates.value.length) {
+        selectedDate.value = '';
+    }
 
     // Reload the DataTable with new date filter
     if (dataTable.value) {
@@ -277,11 +291,13 @@ const onDateChange = () => {
     }
 }
 
+// pply filter for which date data to display.
 const applyQuickFilter = (filterValue) => {
     selectedDate.value = filterValue
     onDateChange()
 }
 
+// refreshes page incase of new updates.
 const refreshData = () => {
     loading.value = true
     error.value = ''
@@ -304,6 +320,7 @@ const refreshData = () => {
     })
 }
 
+// download the data from the selected file.
 const downloadCurrentData = () => {
     const params = new URLSearchParams({
         date_filter: selectedDate.value || '',
