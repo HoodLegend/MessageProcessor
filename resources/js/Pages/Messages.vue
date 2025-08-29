@@ -59,18 +59,13 @@
 
             <!-- Date Range Quick Filters -->
             <div class="flex flex-wrap gap-2 mb-6">
-and how should the button look like now this is my current implementation
-<button
-                    v-for="quickFilter in quickFilters"
-                    :key="quickFilter.value"
-                    @click="applyQuickFilter(quickFilter.value)"
-                    :class="[
+                <button v-for="quickFilter in quickFilters" :key="quickFilter.value"
+                    @click="applyQuickFilter(quickFilter.value)" :class="[
                         'px-3 py-1 text-xs rounded-full border transition-colors',
                         quickFilter.active
                             ? 'bg-blue-100 border-blue-300 text-blue-700'
                             : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
-                    ]"
-                >
+                    ]">
                     {{ quickFilter.label }}
                 </button>
             </div>
@@ -270,7 +265,7 @@ const onDateChange = () => {
     error.value = '';
 
     // display all Dates by default if not available dates exist.
-    if (!availableDates.value.length) {
+    if (!props.availableDates.length) {
         selectedDate.value = '';
     }
 
