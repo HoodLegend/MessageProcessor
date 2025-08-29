@@ -13,7 +13,7 @@
                         <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
                         <select id="dateFilter" v-model="selectedDate" @change="onDateChange"
                             class="form-select rounded border-gray-300 text-sm">
-                            <option value="">All Dates</option>
+                            <option value="">Select Date</option>
                             <option v-for="date in availableDates" :key="date.value" :value="date.value">
                                 {{ date.label }} ({{ date.count }} records)
                             </option>
@@ -132,6 +132,7 @@ const error = ref('')
 const lastUpdated = ref(new Date().toLocaleString())
 const hasRecords = ref(false)
 const dataTable = ref(null)
+const filter = ref(false);
 
 // Computed properties
 const hasData = computed(() => /* dataTable.value && dataTable.value.data().count() > 0 */ hasRecords.value)
@@ -266,14 +267,14 @@ const onDateChange = () => {
 
     // display all Dates by default if not available dates exist.
     if (!props.availableDates.length) {
-        selectedDate.value = 'No Dates Available';
+        selectedDate.value = '';
     }
 
     if (
         selectedDate.value &&
         !props.availableDates.some(d => d.value === selectedDate.value)
     ) {
-        selectedDate.value = 'No Dates Available'
+        selectedDate.value = ''
     }
 
     // Reload the DataTable with new date filter
@@ -322,6 +323,7 @@ const downloadCurrentData = () => {
 
     window.open(route('transactions.export') + '?' + params.toString(), '_blank')
 }
+
 // Formatting functions that format the date, amount, phonenumber, time for better representation.
 const formatDate = (dateString) => {
     if (!dateString || dateString === 'N/A') return 'N/A'
@@ -435,6 +437,7 @@ onUnmounted(() => {
 .dataTables_wrapper .dataTables_length,
 .dataTables_wrapper .dataTables_filter {
     margin-bottom: 1rem;
+    padding:1rem;
 }
 
 .dataTables_wrapper .dataTables_filter input,
