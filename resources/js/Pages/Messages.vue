@@ -177,7 +177,7 @@ const initializeDataTable = () => {
             data: function(d) {
                 // Add custom filters to the request
                 d.date_filter = selectedDate.value
-                // d._token = getCsrfToken();
+                d._token = getCsrfToken();
                 return d
             },
             dataSrc: function(json) {
@@ -418,8 +418,11 @@ const formatPhoneNumber = (phone) => {
 
 // Lifecycle
 onMounted(() => {
-    initializeDataTable()
-})
+    setTimeout(() => {
+initializeDataTable()
+    }, 100);
+
+});
 
 onUnmounted(() => {
     if (dataTable.value) {
