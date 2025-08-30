@@ -120,7 +120,7 @@ class ParseDatFilesCommand extends Command
         static $transactionIdPattern = null;
 
        // Add the new time-only pattern to your static regex definitions
-        static $timeOnlyPattern = '/(\d{8})(\d{6})INTERNET/i';
+        // static $timeOnlyPattern = '/(\d{8})(\d{6})INTERNET/i';
 
 
 
