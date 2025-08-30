@@ -107,7 +107,7 @@ class ParseDatFilesCommand extends Command
         // static $primaryPattern = '/(\d{8})\s*(\d{20})\s*(\d{9,12})/';
         // static $alternativePattern = '/(\d{8})\s*(\d{15,25})\s*(\d{8,12})/';
         // Updated regex patterns for your data format
-        static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14})INTERNET/i';
+        static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})INTERNET/i';
 
         // Primary pattern: Date (8) + Amount (20) + Mobile (9-12)
         static $primaryPattern = '/(\d{8})\s*(\d{20})\s*(\d{9,12})/';
@@ -121,6 +121,8 @@ class ParseDatFilesCommand extends Command
 
        // Add the new time-only pattern to your static regex definitions
         static $timeOnlyPattern = '/(\d{8})(\d{6})INTERNET/i';
+
+
 
 // Modified parsing method
 // Statistics for monitoring (no verbose logging)
@@ -167,14 +169,25 @@ while (($line = fgets($stream)) !== false) {
         continue;
     }
 
-    $segment = trim($segmentMatch[1]);
-    $fullTimestamp = $segmentMatch[2];
+if (!preg_match($authRegex, $line, $segmentMatch)) {
+    $stats['skipped_no_auth']++;
+    continue;
+}
 
-    // Extract timestamp components once
+$segment = trim($segmentMatch[1]);
+$fullTimestamp = $segmentMatch[2];
+
+// FIXED: Extract timestamp components correctly based on actual length
+if (strlen($fullTimestamp) >= 14) {
+    $dateFromTimestamp = substr($fullTimestamp, 0, 8);        // YYYYMMDD
+    $timeFromTimestamp = substr($fullTimestamp, 8, 6);        // HHMMSS
+} else {
+    // Fallback for shorter timestamps
     $dateFromTimestamp = substr($fullTimestamp, 0, 8);
-    $timeFromTimestamp = substr($fullTimestamp, 8, 6);
+    $timeFromTimestamp = '000000'; // Default time
+}
 
-    $stats['processed_lines']++;
+$stats['processed_lines']++;
 
     // Try primary pattern first
     if (preg_match($primaryPattern, $segment, $matches)) {
