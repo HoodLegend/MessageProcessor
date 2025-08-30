@@ -220,6 +220,26 @@ $this->logProcessingSummary($fileName, $stats, $results->count());
 return $results;
     }
 
+    private function processTimeOnlyTransaction(array $matches, string $line): ?array
+    {
+        $dateRaw = $matches[1];
+        $timeRaw = $matches[2];
+
+        return [
+            'transaction_date' => $this->parseDate($dateRaw),        // Changed from 'date'
+            'transaction_time' => $this->formatTime($timeRaw),       // Changed from 'time'
+            'amount' => '0.00', // No amount in time-only format
+            'mobile_number' => '', // No mobile in time-only format
+            'transaction_id' => '', // No transaction ID in time-only format
+            // Remove these fields that aren't in your other methods:
+            // 'file' => $this->currentFileName,
+            // 'line' => $this->currentLineNumber,
+            // 'raw_line' => $line,
+            // 'pattern_type' => 'time_only'
+        ];
+    }
+
+
     /**
      * Process standard transaction pattern
      */
