@@ -168,12 +168,12 @@ const initializeDataTable = () => {
     dataTable.value = $('#transactionsTable').DataTable({
         processing: true,
         serverSide: true,
-        headers:{
-            'X-CSRF-TOKEN': $('meta[name="csrf-token"]')?.attr('content')
-        },
         ajax: {
             url: route('transactions.data'),
             type: 'POST',
+            headers: {
+                'X-CSRF-TOKEN': $('meta[name="csrf-token"]')?.attr('content')
+            },
             data: function(d) {
                 // Add custom filters to the request
                 d.date_filter = selectedDate.value
