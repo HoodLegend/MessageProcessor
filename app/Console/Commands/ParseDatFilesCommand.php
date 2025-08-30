@@ -104,141 +104,84 @@ class ParseDatFilesCommand extends Command
 
         // Pre-compile regex patterns for better performance
         // static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14})INTERNET/i';
-        // static $primaryPattern = '/(\d{8})\s*(\d{20})\s*(\d{9,12})/';
-        // static $alternativePattern = '/(\d{8})\s*(\d{15,25})\s*(\d{8,12})/';
-        // Updated regex patterns for your data format
         static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})INTERNET/i';
-
-        // Primary pattern: Date (8) + Amount (20) + Mobile (9-12)
         static $primaryPattern = '/(\d{8})\s*(\d{20})\s*(\d{9,12})/';
-
-        // Alternative pattern: Date (8) + Amount (15-25) + Mobile (8-12)
         static $alternativePattern = '/(\d{8})\s*(\d{15,25})\s*(\d{8,12})/';
-
-        // NEW: Time-only pattern for cases like "2025070300065200INTERNET"
-        static $timeOnlyPattern = '/(\d{8})(\d{6})INTERNET/i';
         static $transactionIdPattern = null;
 
-       // Add the new time-only pattern to your static regex definitions
-        // static $timeOnlyPattern = '/(\d{8})(\d{6})INTERNET/i';
-
-
-
-// Modified parsing method
-// Statistics for monitoring (no verbose logging)
-$stats = [
-    'total_lines' => 0,
-    'processed_lines' => 0,
-    'successful_matches' => 0,
-    'alternative_matches' => 0,
-    'time_only_matches' => 0, // New stat for time-only matches
-    'skipped_no_cpy' => 0,
-    'skipped_no_auth' => 0,
-    'processing_errors' => 0
-];
-
-// Stream processing instead of loading entire file into memory
-$stream = fopen('php://temp', 'r+');
-fwrite($stream, $content);
-rewind($stream);
-
-while (($line = fgets($stream)) !== false) {
-    $stats['total_lines']++;
-    $line = trim($line);
-
-    // Quick filters first (fastest operations)
-    if (empty($line) || strpos($line, 'CPY') === false) {
-        $stats['skipped_no_cpy']++;
-        continue;
-    }
-
-    // Check for time-only pattern first (most specific)
-    if (preg_match($timeOnlyPattern, $line, $timeOnlyMatch)) {
-        $result = $this->processTimeOnlyTransaction($timeOnlyMatch, $line);
-        if ($result) {
-            $results->push($result);
-            $stats['time_only_matches']++;
-        }
-        $stats['processed_lines']++;
-        continue;
-    }
-
-    // Single regex match for AUTH CANCELLED pattern
-    if (!preg_match($authRegex, $line, $segmentMatch)) {
-        $stats['skipped_no_auth']++;
-        continue;
-    }
-
-if (!preg_match($authRegex, $line, $segmentMatch)) {
-    $stats['skipped_no_auth']++;
-    continue;
-}
-
-$segment = trim($segmentMatch[1]);
-$fullTimestamp = $segmentMatch[2];
-
-// FIXED: Extract timestamp components correctly based on actual length
-if (strlen($fullTimestamp) >= 14) {
-    $dateFromTimestamp = substr($fullTimestamp, 0, 8);        // YYYYMMDD
-    $timeFromTimestamp = substr($fullTimestamp, 8, 6);        // HHMMSS
-} else {
-    // Fallback for shorter timestamps
-    $dateFromTimestamp = substr($fullTimestamp, 0, 8);
-    $timeFromTimestamp = '000000'; // Default time
-}
-
-$stats['processed_lines']++;
-
-    // Try primary pattern first
-    if (preg_match($primaryPattern, $segment, $matches)) {
-        $result = $this->processTransaction($matches, $dateFromTimestamp, $timeFromTimestamp, $line);
-        if ($result) {
-            $results->push($result);
-            $stats['successful_matches']++;
-        }
-    }
-    // Try alternative pattern if primary fails
-    elseif (preg_match($alternativePattern, $segment, $altMatches)) {
-        $result = $this->processTransactionAlternative($altMatches, $dateFromTimestamp, $timeFromTimestamp, $line);
-        if ($result) {
-            $results->push($result);
-            $stats['alternative_matches']++;
-        }
-    } else {
-        $stats['processing_errors']++;
-        // Only log first few errors to prevent log spam
-        if ($stats['processing_errors'] <= 5) {
-            \Log::warning("Parse error in {$fileName} line {$stats['total_lines']}: no pattern match");
-        }
-    }
-}
-
-fclose($stream);
-
-// Single summary log entry
-$this->logProcessingSummary($fileName, $stats, $results->count());
-return $results;
-    }
-
-    private function processTimeOnlyTransaction(array $matches, string $line): ?array
-    {
-        $dateRaw = $matches[1];
-        $timeRaw = $matches[2];
-
-        return [
-            'transaction_date' => $this->parseDate($dateRaw),        // Changed from 'date'
-            'transaction_time' => $this->formatTime($timeRaw),       // Changed from 'time'
-            'amount' => '0.00', // No amount in time-only format
-            'mobile_number' => '', // No mobile in time-only format
-            'transaction_id' => '', // No transaction ID in time-only format
-            // Remove these fields that aren't in your other methods:
-            // 'file' => $this->currentFileName,
-            // 'line' => $this->currentLineNumber,
-            // 'raw_line' => $line,
-            // 'pattern_type' => 'time_only'
+        // Statistics for monitoring (no verbose logging)
+        $stats = [
+            'total_lines' => 0,
+            'processed_lines' => 0,
+            'successful_matches' => 0,
+            'alternative_matches' => 0,
+            'skipped_no_cpy' => 0,
+            'skipped_no_auth' => 0,
+            'processing_errors' => 0
         ];
-    }
 
+        // Stream processing instead of loading entire file into memory
+        $stream = fopen('php://temp', 'r+');
+        fwrite($stream, $content);
+        rewind($stream);
+
+        while (($line = fgets($stream)) !== false) {
+            $stats['total_lines']++;
+            $line = trim($line);
+
+            // Quick filters first (fastest operations)
+            if (empty($line) || strpos($line, 'CPY') === false) {
+                $stats['skipped_no_cpy']++;
+                continue;
+            }
+
+            // Single regex match for AUTH CANCELLED pattern
+            if (!preg_match($authRegex, $line, $segmentMatch)) {
+                $stats['skipped_no_auth']++;
+                continue;
+            }
+
+            $segment = trim($segmentMatch[1]);
+            $fullTimestamp = $segmentMatch[2];
+
+            // Extract timestamp components once
+            $dateFromTimestamp = substr($fullTimestamp, 0, 8);
+            $timeFromTimestamp = substr($fullTimestamp, 8, 6);
+
+            $stats['processed_lines']++;
+
+            // Try primary pattern first
+            if (preg_match($primaryPattern, $segment, $matches)) {
+                $result = $this->processTransaction($matches, $dateFromTimestamp, $timeFromTimestamp, $line);
+                if ($result) {
+                    $results->push($result);
+                    $stats['successful_matches']++;
+                }
+            }
+            // Try alternative pattern if primary fails
+            elseif (preg_match($alternativePattern, $segment, $altMatches)) {
+                $result = $this->processTransactionAlternative($altMatches, $dateFromTimestamp, $timeFromTimestamp, $line);
+                if ($result) {
+                    $results->push($result);
+                    $stats['alternative_matches']++;
+                }
+            } else {
+                $stats['processing_errors']++;
+
+                // Only log first few errors to prevent log spam
+                if ($stats['processing_errors'] <= 5) {
+                    \Log::warning("Parse error in {$fileName} line {$stats['total_lines']}: no pattern match");
+                }
+            }
+        }
+
+        fclose($stream);
+
+        // Single summary log entry
+        $this->logProcessingSummary($fileName, $stats, $results->count());
+
+        return $results;
+    }
 
     /**
      * Process standard transaction pattern
@@ -259,8 +202,6 @@ return $results;
                 $transactionId = trim($tm[1]);
             }
 
-            // Use the transaction date from the segment data, not the timestamp
-            // The timestamp is used for the time component only
             return [
                 'transaction_date' => $this->parseDate($dateRaw),
                 'transaction_time' => $this->formatTime($timeFromTimestamp),
@@ -303,24 +244,20 @@ return $results;
     /**
      * Process alternative transaction pattern
      */
-    private function processTransactionAlternative(array $matches, string $dateFromTimestamp, string $timeFromTimestamp, string $fullLine): ?array
+    private function processTransactionAlternative(array $altMatches, string $dateFromTimestamp, string $timeFromTimestamp, string $fullLine): ?array
     {
         try {
-            $dateRaw = $matches[1];
-            $amountRaw = $matches[2];
-            $mobileRaw = $matches[3];
+            $dateRaw = $altMatches[1];
+            $amountRaw = $altMatches[2];
+            $mobileRaw = $altMatches[3];
 
-            // Handle different amount lengths for alternative pattern
             $cleanAmount = ltrim($amountRaw, '0');
             $amountValue = (int) ($cleanAmount ?: '0');
 
-            // If amount string is longer than 20 digits, assume last 2 are cents
-            if (strlen($amountRaw) >= 20) {
-                $amount = number_format($amountValue / 100, 2, '.', '');
-            } else {
-                // For shorter amounts, might be in different format
-                $amount = number_format($amountValue / 100, 2, '.', '');
-            }
+            // Handle different amount formats
+            $amount = strlen($amountRaw) >= 20
+                ? number_format($amountValue / 100, 2, '.', '')
+                : number_format($amountValue / 100, 2, '.', '');
 
             // Extract transaction ID
             $transactionId = '';
@@ -343,29 +280,37 @@ return $results;
 
 
     // Helper method to format time from HHMMSSS to HH:MM:SS
-    private function formatTime(string $timeString): string
-    {
-        $timeString = str_pad($timeString, 6, '0', STR_PAD_LEFT);
+private function formatTime(string $timeString): string
+{
+    $timeString = trim($timeString);
 
-        if (strlen($timeString) >= 6) {
-            $hours = (int) substr($timeString, 0, 2);
-            $minutes = (int) substr($timeString, 2, 2);
-            $seconds = (int) substr($timeString, 4, 2);
-
-            // Handle overflow
-            $minutes += intval($seconds / 60);
-            $seconds = $seconds % 60;
-
-            $hours += intval($minutes / 60);
-            $minutes = $minutes % 60;
-
-            $hours = $hours % 24; // Keep within 24-hour format
-
-            return sprintf("%02d:%02d:%02d", $hours, $minutes, $seconds);
-        }
-
+    // Case: already formatted HH:MM:SS
+    if (preg_match('/^\d{2}:\d{2}:\d{2}$/', $timeString)) {
         return $timeString;
     }
+
+    // Case: HHMMSS (6 digits only)
+    if (preg_match('/^\d{6}$/', $timeString)) {
+        $hours = substr($timeString, 0, 2);
+        $minutes = substr($timeString, 2, 2);
+        $seconds = substr($timeString, 4, 2);
+        return "{$hours}:{$minutes}:{$seconds}";
+    }
+
+    // Case: YYYYMMDDHHMMSS... (14+ digits, take from right part)
+    if (preg_match('/^\d{14,}$/', $timeString)) {
+        $hours = substr($timeString, 8, 2);
+        $minutes = substr($timeString, 10, 2);
+        $seconds = substr($timeString, 12, 2);
+        return "{$hours}:{$minutes}:{$seconds}";
+    }
+
+    // Fallback → return as-is
+    return $timeString;
+}
+
+
+
 
 
     /**
