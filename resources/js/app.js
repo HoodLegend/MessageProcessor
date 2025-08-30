@@ -29,5 +29,3 @@ createInertiaApp({
 
 // Set API key for all axios requests
 axios.defaults.headers.common['X-Device-API-Key'] = '9WNmRzYtqOPGXCyCp70VTJojwKmHcsOz';
-window.axios.defaults.headers.common['X-CSRF-TOKEN'] = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
-
