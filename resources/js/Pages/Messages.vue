@@ -13,7 +13,7 @@
                         <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
                         <select id="dateFilter" v-model="selectedDate" @change="onDateChange"
                             class="form-select rounded border-gray-300 text-sm">
-                            <option value="">Select Date</option>
+                            <option value="">All Dates</option>
                             <option v-for="date in availableDates" :key="date.value" :value="date.value">
                                 {{ date.label }} ({{ date.count }} records)
                             </option>
@@ -250,7 +250,7 @@ const initializeDataTable = () => {
             lengthMenu: "Show _MENU_ transactions per page",
             search: "Search transactions:",
             zeroRecords: "No matching transactions found",
-            processing: "Loading transaction data..."
+            processing: true
         },
         dom: '<"flex justify-between items-center mb-4"<"flex items-center gap-2"l><"flex items-center gap-2"f>>rtip',
         initComplete: function () {
@@ -266,16 +266,16 @@ const onDateChange = () => {
     error.value = '';
 
     // display all Dates by default if not available dates exist.
-    if (!props.availableDates.length) {
-        selectedDate.value = '';
-    }
+    // if (!props.availableDates.length) {
+    //     selectedDate.value = '';
+    // }
 
-    if (
-        selectedDate.value &&
-        !props.availableDates.some(d => d.value === selectedDate.value)
-    ) {
-        selectedDate.value = ''
-    }
+    // if (
+    //     selectedDate.value &&
+    //     !props.availableDates.some(d => d.value === selectedDate.value)
+    // ) {
+    //     selectedDate.value = ''
+    // }
 
     // Reload the DataTable with new date filter
     if (dataTable.value) {
