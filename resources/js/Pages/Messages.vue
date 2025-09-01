@@ -291,20 +291,28 @@ const onDateChange = () => {
 // }
 
 
-const applyQuickFilter = (dateValue = null) => {
-    if (dateValue !== null) {
-        selectedDate.value = dateValue;
-    }
+const applyQuickFilter = (filterValue) => {
+        console.log('applyQuickFilter called with:', filterValue);
+    console.log('selectedDate before:', selectedDate.value);
 
+    selectedDate.value = filterValue;
+
+    console.log('selectedDate after:', selectedDate.value);
+    console.log('dataTable exists:', !!dataTable.value);
+
+    // Trigger the same reload logic as your dropdown
     loading.value = true;
     error.value = '';
 
     // Reload the DataTable with new date filter
     if (dataTable.value) {
+        console.log('Calling dataTable.ajax.reload...');
         dataTable.value.ajax.reload(() => {
+            console.log('DataTable reload completed');
             loading.value = false;
         }, false);
     } else {
+        console.log('DataTable not available');
         loading.value = false;
         error.value = 'DataTable not initialized';
     }
