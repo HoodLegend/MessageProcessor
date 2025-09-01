@@ -12,21 +12,15 @@
                     <div class="flex items-center gap-2">
                         <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
                         <select id="dateFilter" v-model="selectedDate" @change="onDateChange"
-                            :disabled="!hasAvailableDates" :class="[
+                            :disabled="availableDates.length === 0" :class="[
                                 'form-select rounded border-gray-300 text-sm',
-                                { 'bg-gray-100 cursor-not-allowed': !hasAvailableDates }
+                                { 'bg-gray-100 cursor-not-allowed': availableDates.length === 0 }
                             ]">
                             <option value="">All Dates</option>
-
-                            <option v-if="!hasAvailableDates" disabled value="">
-                                No dates available
-                            </option>
-
-                            <option v-for="date in props.availableDates" :key="date.value" :value="date.value">
+                            <option v-for="date in availableDates" :key="date.value" :value="date.value">
                                 {{ date.label }} ({{ date.count }} records)
                             </option>
                         </select>
-
                     </div>
 
                     <!-- Action Buttons -->
@@ -143,7 +137,7 @@ const hasRecords = ref(false)
 const dataTable = ref(null)
 
 // Computed properties
-const hasData = computed(() => dataTable.value && dataTable.value.data().count() > 0)
+const hasData = computed(() => dataTable.value && dataTable.value.data().count() > 0 /* hasRecords.value */)
 
 const hasAvailableDates = computed(() => props.availableDates?.length > 0);
 
