@@ -12,8 +12,12 @@
                     <div class="flex items-center gap-2">
                         <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
                         <select id="dateFilter" v-model="selectedDate" @change="onDateChange"
-                            class="form-select rounded border-gray-300 text-sm">
+                            :disabled="availableDates.length === 0" class="form-select rounded border-gray-300 text-sm"
+                            :class="{ 'bg-gray-100 cursor-not-allowed': availableDates.length === 0 }">
                             <option value="">All Dates</option>
+                            <option v-if="availableDates.length === 0" value="" disabled>
+                                No dates available
+                            </option>
                             <option v-for="date in availableDates" :key="date.value" :value="date.value">
                                 {{ date.label }} ({{ date.count }} records)
                             </option>
@@ -265,27 +269,24 @@ const onDateChange = () => {
     loading.value = true;
     error.value = '';
 
-    // display all Dates by default if not available dates exist.
-    // if (!props.availableDates.length) {
-    //     selectedDate.value = '';
-    // }
-
-    // if (
-    //     selectedDate.value &&
-    //     !props.availableDates.some(d => d.value === selectedDate.value)
-    // ) {
-    //     selectedDate.value = ''
-    // }
-
     // Reload the DataTable with new date filter
     if (dataTable.value) {
-        dataTable.value.ajax.reload(() => {
-            loading.value = false
-        })
+        dataTable.value.ajax.reload((json) => {
+            loading.value = false;
+            // Optional: Handle empty results
+            if (json && json.data && json.data.length === 0) {
+                // You could show a message or update UI state here
+                console.log('No data found for selected date');
+            }
+        }, false); // false = don't reset paging
+    } else {
+        // Handle case where dataTable is not initialized
+        loading.value = false;
+        error.value = 'DataTable not initialized';
     }
 }
 
-// pply filter for which date data to display.
+// apply filter for which date data to display.
 const applyQuickFilter = (filterValue) => {
     selectedDate.value = filterValue
     onDateChange()
