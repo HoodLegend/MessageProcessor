@@ -12,15 +12,21 @@
                     <div class="flex items-center gap-2">
                         <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
                         <select id="dateFilter" v-model="selectedDate" @change="onDateChange"
-                            :disabled="availableDates.length === 0" :class="[
+                            :disabled="!hasAvailableDates" :class="[
                                 'form-select rounded border-gray-300 text-sm',
-                                { 'bg-gray-100 cursor-not-allowed': availableDates.length === 0 }
+                                { 'bg-gray-100 cursor-not-allowed': !hasAvailableDates }
                             ]">
                             <option value="">All Dates</option>
-                            <option v-for="date in availableDates" :key="date.value" :value="date.value">
+
+                            <option v-if="!hasAvailableDates" disabled value="">
+                                No dates available
+                            </option>
+
+                            <option v-for="date in props.availableDates" :key="date.value" :value="date.value">
                                 {{ date.label }} ({{ date.count }} records)
                             </option>
                         </select>
+
                     </div>
 
                     <!-- Action Buttons -->
@@ -137,7 +143,9 @@ const hasRecords = ref(false)
 const dataTable = ref(null)
 
 // Computed properties
-const hasData = computed(() => /* dataTable.value && dataTable.value.data().count() > 0 */ hasRecords.value)
+const hasData = computed(() => dataTable.value && dataTable.value.data().count() > 0)
+
+const hasAvailableDates = computed(() => props.availableDates?.length > 0);
 
 const quickFilters = computed(() => {
     const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
@@ -167,99 +175,102 @@ const initializeDataTable = () => {
         dataTable.value.destroy()
     }
 
-    dataTable.value = $('#transactionsTable').DataTable({
-        processing: true,
-        serverSide: true,
-        ajax: {
-            url: route('transactions.data'),
-            type: 'POST',
-            headers: {
-                'X-CSRF-TOKEN': $('meta[name="csrf-token"]')?.attr('content')
-            },
-            data: function(d) {
-                // Add custom filters to the request
-                d.date_filter = selectedDate.value
-                d._token = getCsrfToken();
-                return d
-            },
-            dataSrc: function(json) {
-                // Update UI with server response data
-                lastUpdated.value = new Date().toLocaleString()
-                error.value = json.error || ''
-                hasRecords.value = json.data.length > 0
-                return json.data
-            },
-            error: function (xhr, error, thrown) {
-                console.error('DataTable AJAX error:', error)
-                error.value = 'Failed to load transaction data. Please try again.'
-
-                if (xhr.status === 419) {
-                    error.value = 'Session expired. Refreshing page...';
-                    // Force page refresh to get new CSRF token
-                    setTimeout(() => window.location.reload(), 2000);
-                } else {
-                    error.value = `Error ${xhr.status}: Failed to load data. Please try again.`;
-                }
-            }
-        },
-        columns: [
-            {
-                data: 'transaction_id',
-                title: 'Transaction ID',
-                render: function (data) {
-                    return data || 'N/A'
-                }
-            },
-            {
-                data: 'transaction_date',
-                title: 'Transaction Date',
-                render: function (data) {
-                    return formatDate(data)
-                }
-            },
-            {
-                data: 'transaction_time',
-                title: 'Transaction Time',
-                render: function (data) {
-                    return formatTime(data)
-                }
-            },
-            {
-                data: 'amount',
-                title: 'Amount',
-                render: function (data) {
-                    return formatAmount(data)
+    $(document).ready(function () {
+        dataTable.value = $('#transactionsTable').DataTable({
+            processing: true,
+            serverSide: true,
+            ajax: {
+                url: route('transactions.data'),
+                type: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': $('meta[name="csrf-token"]')?.attr('content')
                 },
-                className: 'text-right'
-            },
-            {
-                data: 'mobile_number',
-                title: 'Phone Number',
-                render: function (data) {
-                    return data
+                data: function (d) {
+                    // Add custom filters to the request
+                    d.date_filter = selectedDate.value
+                    // d._token = getCsrfToken();
+                    return d
+                },
+                dataSrc: function (json) {
+                    // Update UI with server response data
+                    lastUpdated.value = new Date().toLocaleString()
+                    error.value = json.error || ''
+                    hasRecords.value = json.data.length > 0
+                    return json.data
+                },
+                error: function (xhr, error, thrown) {
+                    console.error('DataTable AJAX error:', error)
+                    error.value = 'Failed to load transaction data. Please try again.'
+
+                    if (xhr.status === 419) {
+                        error.value = 'Session expired. Refreshing page...';
+                        // Force page refresh to get new CSRF token
+                        setTimeout(() => window.location.reload(), 2000);
+                    } else {
+                        error.value = `Error ${xhr.status}: Failed to load data. Please try again.`;
+                    }
                 }
+            },
+            columns: [
+                {
+                    data: 'transaction_id',
+                    title: 'Transaction ID',
+                    render: function (data) {
+                        return data || 'N/A'
+                    }
+                },
+                {
+                    data: 'transaction_date',
+                    title: 'Transaction Date',
+                    render: function (data) {
+                        return formatDate(data)
+                    }
+                },
+                {
+                    data: 'transaction_time',
+                    title: 'Transaction Time',
+                    render: function (data) {
+                        return formatTime(data)
+                    }
+                },
+                {
+                    data: 'amount',
+                    title: 'Amount',
+                    render: function (data) {
+                        return formatAmount(data)
+                    },
+                    className: 'text-right'
+                },
+                {
+                    data: 'mobile_number',
+                    title: 'Phone Number',
+                    render: function (data) {
+                        return data
+                    }
+                }
+            ],
+            pageLength: 25,
+            lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
+            order: [[1, 'desc']], // Sort by date descending
+            responsive: true,
+            language: {
+                emptyTable: "No transaction data available for selected date",
+                info: "Showing _START_ to _END_ of _TOTAL_ transactions",
+                infoEmpty: "Showing 0 to 0 of 0 transactions",
+                infoFiltered: "(filtered from _MAX_ total transactions)",
+                lengthMenu: "Show _MENU_ transactions per page",
+                search: "Search transactions:",
+                zeroRecords: "No matching transactions found",
+                // processing: true
+            },
+            dom: '<"flex justify-between items-center mb-4"<"flex items-center gap-2"l><"flex items-center gap-2"f>>rtip',
+            initComplete: function () {
+                $('.dataTables_length select').addClass('form-select rounded border-gray-300')
+                $('.dataTables_filter input').addClass('form-input rounded border-gray-300')
             }
-        ],
-        pageLength: 25,
-        lengthMenu: [[10, 25, 50, 100], [10, 25, 50, 100]],
-        order: [[1, 'desc']], // Sort by date descending
-        responsive: true,
-        language: {
-            emptyTable: "No transaction data available for selected date",
-            info: "Showing _START_ to _END_ of _TOTAL_ transactions",
-            infoEmpty: "Showing 0 to 0 of 0 transactions",
-            infoFiltered: "(filtered from _MAX_ total transactions)",
-            lengthMenu: "Show _MENU_ transactions per page",
-            search: "Search transactions:",
-            zeroRecords: "No matching transactions found",
-            // processing: true
-        },
-        dom: '<"flex justify-between items-center mb-4"<"flex items-center gap-2"l><"flex items-center gap-2"f>>rtip',
-        initComplete: function () {
-            $('.dataTables_length select').addClass('form-select rounded border-gray-300')
-            $('.dataTables_filter input').addClass('form-input rounded border-gray-300')
-        }
+        })
     })
+
 }
 
 // listen for the date changes based on the filter selected.
@@ -445,10 +456,7 @@ const formatPhoneNumber = (phone) => {
 
 // Lifecycle
 onMounted(() => {
-    setTimeout(() => {
-initializeDataTable()
-    }, 100);
-
+    initializeDataTable();
 });
 
 onUnmounted(() => {
