@@ -64,7 +64,7 @@
             <!-- Date Range Quick Filters -->
             <div class="flex flex-wrap gap-2 mb-6">
                 <button v-for="quickFilter in quickFilters" :key="quickFilter.value"
-                    @click="applyQuickFilter(quickFilter.value)" :class="[
+                    @click="onQuickFilterClick(quickFilter.value)" :class="[
                         'px-3 py-1 text-xs rounded-full border transition-colors',
                         quickFilter.active
                             ? 'bg-blue-100 border-blue-300 text-blue-700'
@@ -254,7 +254,7 @@ const initializeDataTable = () => {
             lengthMenu: "Show _MENU_ transactions per page",
             search: "Search transactions:",
             zeroRecords: "No matching transactions found",
-            processing: true
+            // processing: true
         },
         dom: '<"flex justify-between items-center mb-4"<"flex items-center gap-2"l><"flex items-center gap-2"f>>rtip',
         initComplete: function () {
@@ -287,9 +287,33 @@ const onDateChange = () => {
 }
 
 // apply filter for which date data to display.
-const applyQuickFilter = (filterValue) => {
-    selectedDate.value = filterValue
-    onDateChange()
+// const applyQuickFilter = (filterValue) => {
+//     selectedDate.value = filterValue
+//     onDateChange()
+// }
+
+const onQuickFilterClick = (filterValue) => {
+    selectedDate.value = filterValue;
+    onDateChange(); // Trigger the same logic as the dropdown
+}
+
+const applyQuickFilter = (dateValue = null) => {
+    if (dateValue !== null) {
+        selectedDate.value = dateValue;
+    }
+
+    loading.value = true;
+    error.value = '';
+
+    // Reload the DataTable with new date filter
+    if (dataTable.value) {
+        dataTable.value.ajax.reload(() => {
+            loading.value = false;
+        }, false);
+    } else {
+        loading.value = false;
+        error.value = 'DataTable not initialized';
+    }
 }
 
 // refreshes page incase of new updates.
