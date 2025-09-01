@@ -12,10 +12,10 @@
                     <div class="flex items-center gap-2">
                         <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
                         <select id="dateFilter" v-model="selectedDate" @change="onDateChange"
-                            :disabled="availableDates.length === 0" class="form-select rounded border-gray-300 text-sm"
-                            :class="{ 'bg-gray-100 cursor-not-allowed': availableDates.length === 0 }">
+                            :disabled="!availableDates" class="form-select rounded border-gray-300 text-sm"
+                            :class="{ 'bg-gray-100 cursor-not-allowed': !availableDates }">
                             <option value="">All Dates</option>
-                            <option v-if="availableDates.length === 0" value="" disabled>
+                            <option v-if="!availableDates" value="" disabled>
                                 No dates available
                             </option>
                             <option v-for="date in availableDates" :key="date.value" :value="date.value">
