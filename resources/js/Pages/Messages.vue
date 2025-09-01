@@ -64,7 +64,7 @@
             <!-- Date Range Quick Filters -->
             <div class="flex flex-wrap gap-2 mb-6">
                 <button v-for="quickFilter in quickFilters" :key="quickFilter.value"
-                    @click="onQuickFilterClick(quickFilter.value)" :class="[
+                    @click="applyQuickFilter(quickFilter.value)" :class="[
                         'px-3 py-1 text-xs rounded-full border transition-colors',
                         quickFilter.active
                             ? 'bg-blue-100 border-blue-300 text-blue-700'
