@@ -12,12 +12,11 @@
                     <div class="flex items-center gap-2">
                         <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
                         <select id="dateFilter" v-model="selectedDate" @change="onDateChange"
-                            :disabled="!availableDates" class="form-select rounded border-gray-300 text-sm"
-                            :class="{ 'bg-gray-100 cursor-not-allowed': !availableDates }">
+                            :disabled="availableDates.length === 0" :class="[
+                                'form-select rounded border-gray-300 text-sm',
+                                { 'bg-gray-100 cursor-not-allowed': availableDates.length === 0 }
+                            ]">
                             <option value="">All Dates</option>
-                            <option v-if="!availableDates" value="" disabled>
-                                No dates available
-                            </option>
                             <option v-for="date in availableDates" :key="date.value" :value="date.value">
                                 {{ date.label }} ({{ date.count }} records)
                             </option>
@@ -136,7 +135,6 @@ const error = ref('')
 const lastUpdated = ref(new Date().toLocaleString())
 const hasRecords = ref(false)
 const dataTable = ref(null)
-const filter = ref(false);
 
 // Computed properties
 const hasData = computed(() => /* dataTable.value && dataTable.value.data().count() > 0 */ hasRecords.value)
@@ -292,10 +290,6 @@ const onDateChange = () => {
 //     onDateChange()
 // }
 
-const onQuickFilterClick = (filterValue) => {
-    selectedDate.value = filterValue;
-    onDateChange(); // Trigger the same logic as the dropdown
-}
 
 const applyQuickFilter = (dateValue = null) => {
     if (dateValue !== null) {
