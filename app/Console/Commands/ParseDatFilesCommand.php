@@ -70,10 +70,10 @@ class ParseDatFilesCommand extends Command
                 $allResults = $allResults->merge($results);
                 $totalRecords += count($results);
 
-                $this->info("  └─ Extracted " . count($results) . " records");
+                $this->info("Extracted " . count($results) . " records");
 
             } catch (\Exception $e) {
-                $this->error("  └─ Error parsing {$fileName}: " . $e->getMessage());
+                $this->error("Error parsing {$fileName}: " . $e->getMessage());
             }
         }
 
@@ -98,102 +98,19 @@ class ParseDatFilesCommand extends Command
     /**
      * Parse the content of a DAT file
     //  */
-    // private function parseFileContent(string $content, string $fileName): Collection
-    // {
-    //     $results = collect();
-
-    //     // Pre-compile regex patterns for better performance
-    //     // static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14})INTERNET/i';
-    //     // static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})INTERNET/i';
-    //     static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})(INTERNET|SMARTAPP|[A-Z]+)/i';
-    //     static $primaryPattern = '/(\d{8})\s*(\d{20})\s*(\d{9,12})/';
-    //     static $alternativePattern = '/(\d{8})\s*(\d{15,25})\s*(\d{8,12})/';
-    //     static $transactionIdPattern = null;
-
-    //     // Statistics for monitoring (no verbose logging)
-    //     $stats = [
-    //         'total_lines' => 0,
-    //         'processed_lines' => 0,
-    //         'successful_matches' => 0,
-    //         'alternative_matches' => 0,
-    //         'skipped_no_cpy' => 0,
-    //         'skipped_no_auth' => 0,
-    //         'processing_errors' => 0
-    //     ];
-
-    //     // Stream processing instead of loading entire file into memory
-    //     $stream = fopen('php://temp', 'r+');
-    //     fwrite($stream, $content);
-    //     rewind($stream);
-
-    //     while (($line = fgets($stream)) !== false) {
-    //         $stats['total_lines']++;
-    //         $line = trim($line);
-
-    //         // Quick filters first (fastest operations)
-    //         if (empty($line) || strpos($line, 'CPY') === false) {
-    //             $stats['skipped_no_cpy']++;
-    //             continue;
-    //         }
-
-    //         // Single regex match for AUTH CANCELLED pattern
-    //         if (!preg_match($authRegex, $line, $segmentMatch)) {
-    //             $stats['skipped_no_auth']++;
-    //             continue;
-    //         }
-
-    //         $segment = trim($segmentMatch[1]);
-    //         $fullTimestamp = $segmentMatch[2];
-
-    //         // Extract timestamp components once
-    //         $dateFromTimestamp = substr($fullTimestamp, 0, 8);
-    //         $timeFromTimestamp = substr($fullTimestamp, 8, 6);
-
-    //         $stats['processed_lines']++;
-
-    //         // Try primary pattern first
-    //         if (preg_match($primaryPattern, $segment, $matches)) {
-    //             $result = $this->processTransaction($matches, $dateFromTimestamp, $timeFromTimestamp, $line);
-    //             if ($result) {
-    //                 $results->push($result);
-    //                 $stats['successful_matches']++;
-    //             }
-    //         }
-    //         // Try alternative pattern if primary fails
-    //         elseif (preg_match($alternativePattern, $segment, $altMatches)) {
-    //             $result = $this->processTransactionAlternative($altMatches, $dateFromTimestamp, $timeFromTimestamp, $line);
-    //             if ($result) {
-    //                 $results->push($result);
-    //                 $stats['alternative_matches']++;
-    //             }
-    //         } else {
-    //             $stats['processing_errors']++;
-
-    //             // Only log first few errors to prevent log spam
-    //             if ($stats['processing_errors'] <= 5) {
-    //                 \Log::warning("Parse error in {$fileName} line {$stats['total_lines']}: no pattern match");
-    //             }
-    //         }
-    //     }
-
-    //     fclose($stream);
-
-    //     // Single summary log entry
-    //     $this->logProcessingSummary($fileName, $stats, $results->count());
-
-    //     return $results;
-    // }
-
-        private function parseFileContent(string $content, string $fileName, ?string $sourceTypeFilter = 'SMARTAPP'): Collection
+    private function parseFileContent(string $content, string $fileName): Collection
     {
         $results = collect();
 
         // Pre-compile regex patterns for better performance
-        static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})(INTERNET|SMARTAPP|[A-Z]+)/i';
-        static $primaryPattern = '/(\d{8})\s*(\d{20})\s*(\d{9,12})/';
+        // static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14})INTERNET/i';
+        // static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})INTERNET/i';
+        static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})(SMARTAPP|[A-Z]+)/i';
+        static $primaryPattern = '/(\d{8})\s*(\d{20})\s*(\d{9,13})/';
         static $alternativePattern = '/(\d{8})\s*(\d{15,25})\s*(\d{8,12})/';
+        static $transactionIdPattern = null;
 
-        // Statistics for monitoring (including source type breakdown)
+        // Statistics for monitoring (no verbose logging)
         $stats = [
             'total_lines' => 0,
             'processed_lines' => 0,
@@ -201,9 +118,7 @@ class ParseDatFilesCommand extends Command
             'alternative_matches' => 0,
             'skipped_no_cpy' => 0,
             'skipped_no_auth' => 0,
-            'skipped_wrong_source' => 0,
-            'processing_errors' => 0,
-            'source_types' => [] // Track different source types found
+            'processing_errors' => 0
         ];
 
         // Stream processing instead of loading entire file into memory
@@ -216,8 +131,8 @@ class ParseDatFilesCommand extends Command
             $line = trim($line);
 
             // Quick filters first (fastest operations)
-            if (empty($line) || strpos($line, 'CPY') === false) {
-                $stats['skipped_no_cpy']++;
+            if (empty($line) || strpos($line, 'CRC') === false) {
+                $stats['skipped_no_crc']++;
                 continue;
             }
 
@@ -229,19 +144,6 @@ class ParseDatFilesCommand extends Command
 
             $segment = trim($segmentMatch[1]);
             $fullTimestamp = $segmentMatch[2];
-            $sourceType = strtoupper($segmentMatch[3]); // Capture the source type
-
-            // Track source types found
-            if (!isset($stats['source_types'][$sourceType])) {
-                $stats['source_types'][$sourceType] = 0;
-            }
-            $stats['source_types'][$sourceType]++;
-
-            // Filter by source type if specified
-            if ($sourceTypeFilter && $sourceType !== strtoupper($sourceTypeFilter)) {
-                $stats['skipped_wrong_source']++;
-                continue;
-            }
 
             // Extract timestamp components once
             $dateFromTimestamp = substr($fullTimestamp, 0, 8);
@@ -251,7 +153,7 @@ class ParseDatFilesCommand extends Command
 
             // Try primary pattern first
             if (preg_match($primaryPattern, $segment, $matches)) {
-                $result = $this->processTransaction($matches, $dateFromTimestamp, $timeFromTimestamp, $line, $sourceType);
+                $result = $this->processTransaction($matches, $dateFromTimestamp, $timeFromTimestamp, $line);
                 if ($result) {
                     $results->push($result);
                     $stats['successful_matches']++;
@@ -259,7 +161,7 @@ class ParseDatFilesCommand extends Command
             }
             // Try alternative pattern if primary fails
             elseif (preg_match($alternativePattern, $segment, $altMatches)) {
-                $result = $this->processTransactionAlternative($altMatches, $dateFromTimestamp, $timeFromTimestamp, $line, $sourceType);
+                $result = $this->processTransactionAlternative($altMatches, $dateFromTimestamp, $timeFromTimestamp, $line);
                 if ($result) {
                     $results->push($result);
                     $stats['alternative_matches']++;
@@ -269,229 +171,113 @@ class ParseDatFilesCommand extends Command
 
                 // Only log first few errors to prevent log spam
                 if ($stats['processing_errors'] <= 5) {
-                    \Log::warning("Parse error in {$fileName} line {$stats['total_lines']}: no pattern match", [
-                        'source_type' => $sourceType,
-                        'segment' => substr($segment, 0, 100) // First 100 chars for context
-                    ]);
+                    \Log::warning("Parse error in {$fileName} line {$stats['total_lines']}: no pattern match");
                 }
             }
         }
 
         fclose($stream);
 
-        // Enhanced summary log entry with source type breakdown
-        $this->logProcessingSummary($fileName, $stats, $results->count(), $sourceTypeFilter);
+        // Single summary log entry
+        $this->logProcessingSummary($fileName, $stats, $results->count());
 
         return $results;
     }
 
-       /**
-     * Modified processTransaction to include source type
-     */
-    private function processTransaction(array $matches, string $dateFromTimestamp, string $timeFromTimestamp, string $line, string $sourceType): ?array
-    {
-        try {
-            $date = $matches[1];
-            $transactionId = $matches[2];
-            $amount = intval($matches[3]);
-
-            // Format date and time
-            $formattedDate = $this->formatDate($dateFromTimestamp);
-            $formattedTime = $this->formatTime($timeFromTimestamp);
-
-            // Extract mobile number from the line (your existing logic)
-            $mobileNumber = $this->extractMobileNumber($line);
-
-            return [
-                'transaction_id' => $transactionId,
-                'amount' => $amount / 100, // Convert cents to currency units
-                'mobile_number' => $mobileNumber,
-                'transaction_date' => $formattedDate,
-                'transaction_time' => $formattedTime,
-                'source_type' => $sourceType, // Add source type to the result
-                'raw_line' => $line // Optional: keep for debugging
-            ];
-        } catch (\Exception $e) {
-            \Log::error("Error processing transaction", [
-                'error' => $e->getMessage(),
-                'matches' => $matches,
-                'source_type' => $sourceType
-            ]);
-            return null;
-        }
-    }
-
-    /**
-     * Modified processTransactionAlternative to include source type
-     */
-    private function processTransactionAlternative(array $matches, string $dateFromTimestamp, string $timeFromTimestamp, string $line, string $sourceType): ?array
-    {
-        try {
-            $date = $matches[1];
-            $transactionId = $matches[2];
-            $amount = intval($matches[3]);
-
-            // Format date and time
-            $formattedDate = $this->formatDate($dateFromTimestamp);
-            $formattedTime = $this->formatTime($timeFromTimestamp);
-
-            // Extract mobile number from the line (your existing logic)
-            $mobileNumber = $this->extractMobileNumber($line);
-
-            return [
-                'transaction_id' => $transactionId,
-                'amount' => $amount / 100, // Convert cents to currency units
-                'mobile_number' => $mobileNumber,
-                'transaction_date' => $formattedDate,
-                'transaction_time' => $formattedTime,
-                'source_type' => $sourceType, // Add source type to the result
-                'pattern_used' => 'alternative', // Track which pattern was used
-                'raw_line' => $line // Optional: keep for debugging
-            ];
-        } catch (\Exception $e) {
-            \Log::error("Error processing alternative transaction", [
-                'error' => $e->getMessage(),
-                'matches' => $matches,
-                'source_type' => $sourceType
-            ]);
-            return null;
-        }
-    }
-
-    private function logProcessingSummary(string $fileName, array $stats, int $resultsCount, ?string $sourceTypeFilter): void
-    {
-        $sourceTypeBreakdown = '';
-        foreach ($stats['source_types'] as $type => $count) {
-            $sourceTypeBreakdown .= "{$type}: {$count}, ";
-        }
-        $sourceTypeBreakdown = rtrim($sourceTypeBreakdown, ', ');
-
-        \Log::info("File processing summary", [
-            'file' => $fileName,
-            'total_lines' => $stats['total_lines'],
-            'processed_lines' => $stats['processed_lines'],
-            'successful_results' => $resultsCount,
-            'successful_matches' => $stats['successful_matches'],
-            'alternative_matches' => $stats['alternative_matches'],
-            'skipped_no_cpy' => $stats['skipped_no_cpy'],
-            'skipped_no_auth' => $stats['skipped_no_auth'],
-            'skipped_wrong_source' => $stats['skipped_wrong_source'],
-            'processing_errors' => $stats['processing_errors'],
-            'source_types_found' => $sourceTypeBreakdown,
-            'filter_applied' => $sourceTypeFilter ?? 'none',
-            'processing_rate' => $stats['total_lines'] > 0 ? round(($resultsCount / $stats['total_lines']) * 100, 2) . '%' : '0%'
-        ]);
-
-        // Console output for immediate feedback
-        if ($sourceTypeFilter) {
-            $this->info("Processed {$fileName}: {$resultsCount} {$sourceTypeFilter} transactions extracted");
-            if ($stats['skipped_wrong_source'] > 0) {
-                $this->info("  Skipped {$stats['skipped_wrong_source']} non-{$sourceTypeFilter} transactions");
-            }
-        } else {
-            $this->info("Processed {$fileName}: {$resultsCount} transactions extracted (all source types)");
-        }
-
-        if (!empty($stats['source_types'])) {
-            $this->info("  Source types found: {$sourceTypeBreakdown}");
-        }
-    }
-
-
     /**
      * Process standard transaction pattern
      */
-    // private function processTransaction(array $matches, string $dateFromTimestamp, string $timeFromTimestamp, string $fullLine, string $sourceType): ?array
-    // {
-    //     try {
-    //         $dateRaw = $matches[1];
-    //         $amountRaw = $matches[2];
-    //         $mobileRaw = $matches[3];
+    private function processTransaction(array $matches, string $dateFromTimestamp, string $timeFromTimestamp, string $fullLine): ?array
+    {
+        try {
+            $dateRaw = $matches[1];
+            $amountRaw = $matches[2];
+            $mobileRaw = $matches[3];
 
-    //         $cleanAmount = ltrim($amountRaw, '0');
-    //         $amount = number_format(((int) ($cleanAmount ?: '0')) / 100, 2, '.', '');
+            $cleanAmount = ltrim($amountRaw, '0');
+            $amount = number_format(((int) ($cleanAmount ?: '0')) / 100, 2, '.', '');
 
-    //         // Extract transaction ID efficiently
-    //         $transactionId = '';
-    //         if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z][A-Z0-9]{4,})/', $fullLine, $tm)) {
-    //             $transactionId = trim($tm[1]);
-    //         }
+            // Extract transaction ID efficiently
+            $transactionId = '';
+            if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z][A-Z0-9]{4,})/', $fullLine, $tm)) {
+                $transactionId = trim($tm[1]);
+            }
 
-    //         return [
-    //             'transaction_date' => $this->parseDate($dateRaw),
-    //             'transaction_time' => $this->formatTime($timeFromTimestamp),
-    //             'amount' => $amount,
-    //             'mobile_number' => $mobileRaw,
-    //             'transaction_id' => $transactionId,
-    //         ];
-    //     } catch (\Exception $e) {
-    //         \Log::error("Transaction processing error: " . $e->getMessage());
-    //         return null;
-    //     }
-    // }
+            return [
+                'transaction_date' => $this->parseDate($dateRaw),
+                'transaction_time' => $this->formatTime($timeFromTimestamp),
+                'amount' => $amount,
+                'mobile_number' => $mobileRaw,
+                'transaction_id' => $transactionId,
+            ];
+        } catch (\Exception $e) {
+            \Log::error("Transaction processing error: " . $e->getMessage());
+            return null;
+        }
+    }
 
     /**
      * Log processing summary (single entry per file)
      */
-    // private function logProcessingSummary(string $fileName, array $stats, int $resultCount): void
-    // {
-    //     $summary = [
-    //         'file' => $fileName,
-    //         'lines_total' => $stats['total_lines'],
-    //         'lines_processed' => $stats['processed_lines'],
-    //         'successful_matches' => $stats['successful_matches'],
-    //         'alternative_matches' => $stats['alternative_matches'],
-    //         'final_results' => $resultCount,
-    //         'skip_no_cpy' => $stats['skipped_no_cpy'],
-    //         'skip_no_auth' => $stats['skipped_no_auth'],
-    //         'errors' => $stats['processing_errors'],
-    //         'memory_peak' => memory_get_peak_usage(true) / 1024 / 1024 . 'MB'
-    //     ];
+    private function logProcessingSummary(string $fileName, array $stats, int $resultCount): void
+    {
+        $summary = [
+            'file' => $fileName,
+            'lines_total' => $stats['total_lines'],
+            'lines_processed' => $stats['processed_lines'],
+            'successful_matches' => $stats['successful_matches'],
+            'alternative_matches' => $stats['alternative_matches'],
+            'final_results' => $resultCount,
+            'skip_no_cpy' => $stats['skipped_no_cpy'],
+            'skip_no_auth' => $stats['skipped_no_auth'],
+            'errors' => $stats['processing_errors'],
+            'memory_peak' => memory_get_peak_usage(true) / 1024 / 1024 . 'MB'
+        ];
 
-    //     // Single line summary for production monitoring
-    //     $this->info("Parsed {$fileName}: {$resultCount} transactions from {$stats['total_lines']} lines" .
-    //         ($stats['processing_errors'] > 0 ? " ({$stats['processing_errors']} errors)" : ""));
+        // Single line summary for production monitoring
+        $this->info("Parsed {$fileName}: {$resultCount} transactions from {$stats['total_lines']} lines" .
+            ($stats['processing_errors'] > 0 ? " ({$stats['processing_errors']} errors)" : ""));
 
-    //     // Detailed stats to Laravel log for debugging
-    //     \Log::info("DAT parsing summary", $summary);
-    // }
+        // Detailed stats to Laravel log for debugging
+        \Log::info("DAT parsing summary", $summary);
+    }
 
     /**
      * Process alternative transaction pattern
      */
-    // private function processTransactionAlternative(array $altMatches, string $dateFromTimestamp, string $timeFromTimestamp, string $fullLine): ?array
-    // {
-    //     try {
-    //         $dateRaw = $altMatches[1];
-    //         $amountRaw = $altMatches[2];
-    //         $mobileRaw = $altMatches[3];
+    private function processTransactionAlternative(array $altMatches, string $dateFromTimestamp, string $timeFromTimestamp, string $fullLine): ?array
+    {
+        try {
+            $dateRaw = $altMatches[1];
+            $amountRaw = $altMatches[2];
+            $mobileRaw = $altMatches[3];
 
-    //         $cleanAmount = ltrim($amountRaw, '0');
-    //         $amountValue = (int) ($cleanAmount ?: '0');
+            $cleanAmount = ltrim($amountRaw, '0');
+            $amountValue = (int) ($cleanAmount ?: '0');
 
-    //         // Handle different amount formats
-    //         $amount = strlen($amountRaw) >= 20
-    //             ? number_format($amountValue / 100, 2, '.', '')
-    //             : number_format($amountValue / 100, 2, '.', '');
+            // Handle different amount formats
+            $amount = strlen($amountRaw) >= 20
+                ? number_format($amountValue / 100, 2, '.', '')
+                : number_format($amountValue / 100, 2, '.', '');
 
-    //         // Extract transaction ID
-    //         $transactionId = '';
-    //         if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z][A-Z0-9]{4,})/', $fullLine, $tm)) {
-    //             $transactionId = trim($tm[1]);
-    //         }
+            // Extract transaction ID
+            $transactionId = '';
+            if (preg_match('/' . preg_quote($dateRaw, '/') . '([A-Z][A-Z0-9]{4,})/', $fullLine, $tm)) {
+                $transactionId = trim($tm[1]);
+            }
 
-    //         return [
-    //             'transaction_date' => $this->parseDate($dateRaw),
-    //             'transaction_time' => $this->formatTime($timeFromTimestamp),
-    //             'amount' => $amount,
-    //             'mobile_number' => $mobileRaw,
-    //             'transaction_id' => $transactionId,
-    //         ];
-    //     } catch (\Exception $e) {
-    //         \Log::error("Alternative transaction processing error: " . $e->getMessage());
-    //         return null;
-    //     }
-    // }
+            return [
+                'transaction_date' => $this->parseDate($dateRaw),
+                'transaction_time' => $this->formatTime($timeFromTimestamp),
+                'amount' => $amount,
+                'mobile_number' => $mobileRaw,
+                'transaction_id' => $transactionId,
+            ];
+        } catch (\Exception $e) {
+            \Log::error("Alternative transaction processing error: " . $e->getMessage());
+            return null;
+        }
+    }
 
 
     // Helper method to format time from HHMMSSS to HH:MM:SS
@@ -621,7 +407,6 @@ class ParseDatFilesCommand extends Command
      */
     private function saveAllDataToCsv(Collection $results, string $directory): void
     {
-        $this->info("SAVING ALL DATA TO CSV FILES");
         $groupedByDate = $results->groupBy('transaction_date');
         $totalFiles = 0;
         $totalRecords = 0;
@@ -732,19 +517,6 @@ class ParseDatFilesCommand extends Command
 
     private function sendIndividualTransactions(Collection $filteredResults): void
     {
-
-            // Filter to only SMARTAPP transactions
-    $smartappTransactions = $filteredResults->where('source_type', 'SMARTAPP');
-
-    if ($smartappTransactions->isEmpty()) {
-        $this->warn("No SMARTAPP transactions found to send");
-        return;
-    }
-
-    $this->info("Sending {$smartappTransactions->count()} SMARTAPP transactions out of {$filteredResults->count()} total");
-
-    // Use the filtered collection
-    $filteredResults = $smartappTransactions;
 
         $accountingUrl = config('accounting.endpoint_url', 'https://www.castlebet.darth.bond/api/fnb53nmb');
         $successfulSends = 0;
