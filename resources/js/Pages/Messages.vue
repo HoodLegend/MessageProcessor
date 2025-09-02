@@ -137,7 +137,7 @@ const hasRecords = ref(false)
 const dataTable = ref(null)
 
 // Computed properties
-const hasData = computed(() => dataTable.value && dataTable.value.data().count() > 0 /* hasRecords.value */)
+const hasData = computed(() => /* dataTable.value && dataTable.value.data().count() > 0 */ hasRecords.value)
 
 const hasAvailableDates = computed(() => props.availableDates?.length > 0);
 

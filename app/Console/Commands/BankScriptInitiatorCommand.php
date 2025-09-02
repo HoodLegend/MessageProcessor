@@ -337,9 +337,9 @@ class BankScriptInitiatorCommand extends Command
                 return false;
             }
 
-            $this->info("✓ Created messages directory");
+            $this->info("Created messages directory");
         } else {
-            $this->info("✓ Messages directory exists");
+            $this->info("Messages directory exists");
         }
 
         if (!is_writable(self::MESSAGES_DIR)) {
