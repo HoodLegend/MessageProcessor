@@ -154,14 +154,14 @@ const hasData = computed(() => /* dataTable.value && dataTable.value.data().coun
 const quickFilters = computed(() => {
     const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0].replace(/-/g, '')
-    const lastWeek = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0].replace(/-/g, '')
-    const thisMonth = new Date().toISOString().slice(0, 7).replace('-', '');
+    // const lastWeek = new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0].replace(/-/g, '')
+    // const thisMonth = new Date().toISOString().slice(0, 7).replace('-', '');
     return [
         { label: 'All', value: '', active: selectedDate.value === '' },
         { label: 'Today', value: today, active: selectedDate.value === today },
         { label: 'Yesterday', value: yesterday, active: selectedDate.value === yesterday},
-        { label: 'Last 7 Days', value: lastWeek, active: selectedDate.value === lastWeek},
-        { label: 'This Month', value: thisMonth, active: selectedDate.value === thisMonth}
+        { label: 'Last 7 Days', value: 'last7', active: selectedDate.value === 'last7'},
+        { label: 'This Month', value: 'thisMonth', active: selectedDate.value === 'thisMonth'}
     ]
 })
 
