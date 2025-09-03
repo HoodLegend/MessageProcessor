@@ -105,7 +105,8 @@ class ParseDatFilesCommand extends Command
         // Pre-compile regex patterns for better performance
         // static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14})INTERNET/i';
         // static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})INTERNET/i';
-        static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})(SMARTAPP|[A-Z]+)/i';
+        // static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})(SMARTAPP|[A-Z]+)/i';
+        static $authRegex = '/AUTH\s+CANCELLED\s+(.*?)(\d{14,16})SMARTAPP/i';
         static $primaryPattern = '/(\d{8})\s*(\d{20})\s*(\d{9,13})/';
         static $alternativePattern = '/(\d{8})\s*(\d{15,25})\s*(\d{8,12})/';
         static $transactionIdPattern = null;
