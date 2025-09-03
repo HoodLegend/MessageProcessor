@@ -9,7 +9,7 @@
                 <h2 class="text-2xl font-bold text-gray-900">Transactions</h2>
                 <div class="flex flex-col sm:flex-row gap-2">
                     <!-- Date Filter -->
-                    <div class="flex items-center gap-2">
+                    <div v-if="availableDates.length > 0" class="flex items-center gap-2">
                         <label for="dateFilter" class="text-sm font-medium text-gray-700">Filter by Date:</label>
                         <select id="dateFilter" v-model="selectedDate" @change="onDateChange"
                             :disabled="availableDates.length === 0" :class="[
@@ -62,12 +62,23 @@
 
             <!-- Date Range Quick Filters -->
             <div class="flex flex-wrap gap-2 mb-6">
-                <button v-for="quickFilter in quickFilters" :key="quickFilter.value"
+                <!-- <button v-for="quickFilter in quickFilters" :key="quickFilter.value"
                     @click="applyQuickFilter(quickFilter.value)" :class="[
                         'px-3 py-1 text-xs rounded-full border transition-colors',
                         quickFilter.active
                             ? 'bg-blue-100 border-blue-300 text-blue-700'
                             : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200'
+                    ]">
+                    {{ quickFilter.label }}
+                </button> -->
+                <button v-for="quickFilter in quickFilters" :key="quickFilter.value"
+                    @click="applyQuickFilter(quickFilter.value)" :disabled="!isQuickFilterAvailable(quickFilter.value)"
+                    :class="[
+                        'px-3 py-1 text-xs rounded-full border transition-colors',
+                        quickFilter.active
+                            ? 'bg-blue-100 border-blue-300 text-blue-700'
+                            : 'bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200',
+                        !isQuickFilterAvailable(quickFilter.value) && 'opacity-50 cursor-not-allowed'
                     ]">
                     {{ quickFilter.label }}
                 </button>
@@ -139,7 +150,6 @@ const dataTable = ref(null)
 // Computed properties
 const hasData = computed(() => /* dataTable.value && dataTable.value.data().count() > 0 */ hasRecords.value)
 
-const hasAvailableDates = computed(() => props.availableDates?.length > 0);
 
 const quickFilters = computed(() => {
     const today = new Date().toISOString().split('T')[0].replace(/-/g, '')
@@ -289,39 +299,38 @@ const onDateChange = () => {
     }
 }
 
-// apply filter for which date data to display.
+const isQuickFilterAvailable = (value) => {
+    if (!value) return true; // Always allow "All"
+    return availableDates.some(d => d.value.startsWith(value));
+};
+
+const applyQuickFilter = (value) => {
+  if (!isQuickFilterAvailable(value)) return;
+  selectedDate.value = value;
+  onDateChange(); // reuse your existing function
+};
+
+
+
 // const applyQuickFilter = (filterValue) => {
-//     selectedDate.value = filterValue
-//     onDateChange()
+
+//     selectedDate.value = filterValue;
+
+
+//     // Trigger the same reload logic as your dropdown
+//     loading.value = true;
+//     error.value = '';
+
+//     // Reload the DataTable with new date filter
+//     if (dataTable.value) {
+//         dataTable.value.ajax.reload(() => {
+//             loading.value = false;
+//         }, false);
+//     } else {
+//         loading.value = false;
+//         error.value = 'DataTable not initialized';
+//     }
 // }
-
-
-const applyQuickFilter = (filterValue) => {
-        console.log('applyQuickFilter called with:', filterValue);
-    console.log('selectedDate before:', selectedDate.value);
-
-    selectedDate.value = filterValue;
-
-    console.log('selectedDate after:', selectedDate.value);
-    console.log('dataTable exists:', !!dataTable.value);
-
-    // Trigger the same reload logic as your dropdown
-    loading.value = true;
-    error.value = '';
-
-    // Reload the DataTable with new date filter
-    if (dataTable.value) {
-        console.log('Calling dataTable.ajax.reload...');
-        dataTable.value.ajax.reload(() => {
-            console.log('DataTable reload completed');
-            loading.value = false;
-        }, false);
-    } else {
-        console.log('DataTable not available');
-        loading.value = false;
-        error.value = 'DataTable not initialized';
-    }
-}
 
 // refreshes page incase of new updates.
 const refreshData = () => {
@@ -436,17 +445,7 @@ const formatAmount = (amount) => {
     }
 }
 
-const formatPhoneNumber = (phone) => {
-    if (!phone || phone === 'N/A') return 'N/A'
 
-    const cleaned = phone.toString().replace(/\D/g, '')
-
-    if (cleaned.length === 10) {
-        return `(${cleaned.slice(0, 3)}) ${cleaned.slice(3, 6)}-${cleaned.slice(6)}`
-    }
-
-    return phone
-}
 
 // Lifecycle
 onMounted(() => {

@@ -750,45 +750,6 @@ class ParseDatFilesCommand extends Command
     }
 
 
-
-    private function prepareCsvData(string $filePath, Collection $dateRecords): array
-    {
-        $csvData = [];
-
-        if (Storage::exists($filePath)) {
-            $existingContent = Storage::get($filePath);
-            $existingLines = explode("\n", trim($existingContent));
-            if (!empty($existingLines) && strpos($existingLines[0], 'Transaction Date') !== false) {
-                array_shift($existingLines);
-            }
-            $csvData = array_filter(array_map('str_getcsv', $existingLines));
-        } else {
-            $csvData[] = ['Transaction Date', 'Transaction Time', 'Amount', 'Mobile Number', 'Transaction ID'];
-        }
-
-        foreach ($dateRecords as $record) {
-            $csvData[] = [
-                $record['transaction_date'] ?? 'N/A',
-                $record['transaction_time'] ?? 'N/A',
-                $record['amount'] ?? 'N/A',
-                $record['mobile_number'] ?? 'N/A',
-                $record['transaction_id'] ?? 'N/A'
-            ];
-        }
-
-        return $csvData;
-    }
-
-    private function logResults(int $files, int $records, int $successful, array $errors): void
-    {
-        $this->info("Processed: {$files} files, {$records} records, {$successful} sent successfully" .
-            (count($errors) > 0 ? ", " . count($errors) . " errors" : ""));
-
-        foreach ($errors as $error) {
-            \Log::error("DAT parsing error: " . $error);
-        }
-    }
-
     /**
      * Convert array to CSV string efficiently without verbose logging
      */
