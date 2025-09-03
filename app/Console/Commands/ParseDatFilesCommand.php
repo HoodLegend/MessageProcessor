@@ -525,8 +525,12 @@ class ParseDatFilesCommand extends Command
         $errors = [];
         $startTime = microtime(true);
 
-        // Track sent transactions to prevent duplicates based on transaction_id + amount + datetime
-        $sentTransactionHashes = [];
+        // Load previously sent transaction hashes from cache to prevent cross-batch duplicates
+        $cacheKey = 'sent_transactions_hashes';
+        $existingSentHashes = \Cache::get($cacheKey, []);
+
+        // Convert to hash map for better performance (O(1) instead of O(n) lookups)
+        $sentTransactionHashes = array_flip($existingSentHashes);
 
         foreach ($filteredResults as $index => $transaction) {
             try {
@@ -535,18 +539,24 @@ class ParseDatFilesCommand extends Command
                 $transactionDate = $transaction['transaction_date'];
                 $transactionTime = $transaction['transaction_time'] ?? '00:00:00';
 
+                // Skip invalid transactions
+                if (!$transactionId || !$transactionDate || $amount <= 0) {
+                    $this->line("[" . ($index + 1) . "/{$filteredResults->count()}] Skipping invalid transaction: Missing required fields");
+                    continue;
+                }
+
                 // Create a composite hash for transaction_id + amount + date + time combination
                 $compositeHash = md5($transactionId . '|' . $amount . '|' . $transactionDate . '|' . $transactionTime);
 
-                // Check for duplicate transaction_id + amount + date/time combination
-                if (in_array($compositeHash, $sentTransactionHashes)) {
+                // Check for duplicate transaction_id + amount + date/time combination (now using hash map)
+                if (isset($sentTransactionHashes[$compositeHash])) {
                     $duplicateSkips++;
                     $this->line("[" . ($index + 1) . "/{$filteredResults->count()}] Skipping duplicate: {$transactionId} - Amount: {$amount}, DateTime: {$transactionDate} {$transactionTime}");
                     continue;
                 }
 
-                // Add to sent transactions tracker
-                $sentTransactionHashes[] = $compositeHash;
+                // Add to sent transactions tracker (hash map)
+                $sentTransactionHashes[$compositeHash] = true;
 
                 // Format time properly (remove the extra space, ensure proper formatting)
                 $formattedTime = $transactionDate . ' ' . $transactionTime;
@@ -581,6 +591,9 @@ class ParseDatFilesCommand extends Command
                     $successfulSends++;
                     $this->line("Success ({$response->status()})");
 
+                    // Save successful transaction hash to cache for future duplicate prevention
+                    $existingSentHashes[] = $compositeHash;
+
                     // Log successful transaction
                     $this->logIndividualTransaction('SUCCESS', $transaction, $payload, $response->json());
                 } else {
@@ -588,6 +601,9 @@ class ParseDatFilesCommand extends Command
                     $errorMsg = "HTTP {$response->status()}: " . $response->body();
                     $errors[] = "Transaction {$transactionId}: {$errorMsg}";
                     $this->line("Failed: {$errorMsg}");
+
+                    // Remove from current batch tracker since it failed (allow retry in future runs)
+                    unset($sentTransactionHashes[$compositeHash]);
 
                     // Log failed transaction
                     $this->logIndividualTransaction('FAILED', $transaction, $payload, null, $errorMsg);
@@ -604,10 +620,18 @@ class ParseDatFilesCommand extends Command
                 $errors[] = "Transaction {$transactionId}: {$errorMsg}";
                 $this->error("    {$errorMsg}");
 
+                // Remove from current batch tracker since it failed (allow retry in future runs)
+                if (isset($compositeHash)) {
+                    unset($sentTransactionHashes[$compositeHash]);
+                }
+
                 // Log exception
                 $this->logIndividualTransaction('ERROR', $transaction, $payload ?? [], null, $errorMsg);
             }
         }
+
+        // Save updated sent hashes to cache (24 hour TTL)
+        \Cache::put($cacheKey, $existingSentHashes, 86400);
 
         $processingTime = round(microtime(true) - $startTime, 2);
         $actualProcessed = $filteredResults->count() - $duplicateSkips;
