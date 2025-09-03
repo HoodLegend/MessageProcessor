@@ -301,7 +301,7 @@ const onDateChange = () => {
 
 const isQuickFilterAvailable = (value) => {
     if (!value) return true; // Always allow "All"
-    return availableDates.some(d => d.value.startsWith(value));
+    return props.availableDates.some(d => d.value.startsWith(value));
 };
 
 const applyQuickFilter = (value) => {
