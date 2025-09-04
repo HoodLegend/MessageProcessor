@@ -61,7 +61,7 @@ class MessageController extends Controller
     //     }
     // }
 
-    public function getData(Request $request)
+public function getData(Request $request)
 {
     try {
         $draw = $request->input('draw', 1);
@@ -100,6 +100,7 @@ class MessageController extends Controller
         ]);
     }
 }
+
 
     // private function getTransactionPage(string $dateFilter, int $start, int $length): Collection
     // {
@@ -222,7 +223,7 @@ class MessageController extends Controller
     // }
 
 
-    private function getTransactionPage(string $dateFilter, int $start, int $length, string $search = '', string $orderBy = 'transaction_date', string $orderDir = 'asc'): Collection
+private function getTransactionPage(string $dateFilter, int $start, int $length, string $search = '', string $orderBy = 'transaction_date', string $orderDir = 'asc'): Collection
 {
     $allRows = collect();
     $exportDirectory = 'exports';
@@ -276,7 +277,7 @@ class MessageController extends Controller
     return $sortedRows->slice($start, $length)->values();
 }
 
-   private function getCachedTransactionCount(string $dateFilter, string $search = ''): int
+private function getCachedTransactionCount(string $dateFilter, string $search = ''): int
 {
     $cacheKey = 'transaction_count_' . ($dateFilter ?: 'all') . '_search_' . md5($search);
 
@@ -316,7 +317,7 @@ class MessageController extends Controller
                 if (trim($line) === '') continue;
 
                 // If search is provided, check if row matches
-                if ($search !== '') {
+                if (($search ?? '') !== '') {
                     $columns = str_getcsv($line);
                     if (count($columns) >= 5) {
                         $row = [
