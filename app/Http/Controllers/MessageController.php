@@ -62,103 +62,134 @@ class MessageController extends Controller
     // }
 
     public function getData(Request $request)
-    {
-        try {
-            $draw = $request->input('draw', 1);
-            $start = $request->input('start', 0);
-            $length = $request->input('length', 25);
-            $dateFilter = (string) $request->input('date_filter', '');
+{
+    try {
+        $draw = $request->input('draw', 1);
+        $start = $request->input('start', 0);
+        $length = $request->input('length', 25);
+        $dateFilter = (string) $request->input('date_filter', '');
 
-            // Get search and order parameters
-            $searchValue = $request->input('search.value', '');
-            $orderColumn = $request->input('order.0.column', 0);
-            $orderDir = $request->input('order.0.dir', 'asc');
+        // Get search and order parameters
+        $searchValue = (string) $request->input('search.value', '');
+        $orderColumn = $request->input('order.0.column', 0);
+        $orderDir = $request->input('order.0.dir', 'asc');
 
-            // Column mapping for ordering
-            $columns = ['transaction_date', 'transaction_time', 'amount', 'mobile_number', 'transaction_id'];
-            $orderByColumn = $columns[$orderColumn] ?? 'transaction_date';
+        // Column mapping for ordering
+        // $columns = ['transaction_date', 'transaction_time', 'amount', 'mobile_number', 'transaction_id'];
+        $columns = ['transaction_id', 'transaction_date', 'transaction_time', 'amount', 'mobile_number'];
+        $orderByColumn = $columns[$orderColumn] ?? 'transaction_date';
 
-            // Get filtered data
-            $data = $this->getTransactionPage($dateFilter, $start, $length, $searchValue, $orderByColumn, $orderDir);
-            $totalRecords = $this->getCachedTransactionCount($dateFilter, ''); // Total without search
-            $filteredRecords = $this->getCachedTransactionCount($dateFilter, $searchValue); // Total with search
+        // Get filtered data
+        $data = $this->getTransactionPage($dateFilter, $start, $length, $searchValue, $orderByColumn, $orderDir);
+        $totalRecords = $this->getCachedTransactionCount($dateFilter, ''); // Total without search
+        $filteredRecords = $this->getCachedTransactionCount($dateFilter, $searchValue); // Total with search
 
-            return response()->json([
-                'draw' => intval($draw),
-                'recordsTotal' => $totalRecords,
-                'recordsFiltered' => $filteredRecords,
-                'data' => $data->toArray()
-            ]);
-        } catch (\Exception $e) {
-            \Log::error('Transaction data error: ' . $e->getMessage());
-            return response()->json([
-                'draw' => intval($request->input('draw', 1)),
-                'recordsTotal' => 0,
-                'recordsFiltered' => 0,
-                'data' => [],
-                'error' => 'Failed to load transaction data'
-            ]);
-        }
+        return response()->json([
+            'draw' => intval($draw),
+            'recordsTotal' => $totalRecords,
+            'recordsFiltered' => $filteredRecords,
+            'data' => $data->toArray()
+        ]);
+    } catch (\Exception $e) {
+        \Log::error('Transaction data error: ' . $e->getMessage());
+        return response()->json([
+            'draw' => intval($request->input('draw', 1)),
+            'recordsTotal' => 0,
+            'recordsFiltered' => 0,
+            'data' => [],
+            'error' => 'Failed to load transaction data'
+        ]);
     }
+}
 
-    private function getTransactionPage(string $dateFilter, int $start, int $length, string $search = '', string $orderBy = 'transaction_date', string $orderDir = 'asc'): Collection
-    {
-        $allRows = collect();
-        $exportDirectory = 'exports';
-        $files = Storage::files($exportDirectory);
+private function getTransactionPage(string $dateFilter, int $start, int $length, string $search = '', string $orderBy = 'transaction_date', string $orderDir = 'asc'): Collection
+{
+    $allRows = collect();
+    $exportDirectory = 'exports';
+    $files = Storage::files($exportDirectory);
 
-        // First, collect ALL matching rows (needed for proper sorting and searching)
-        foreach ($files as $file) {
-            if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv')
+    // First, collect ALL matching rows (needed for proper sorting and searching)
+    foreach ($files as $file) {
+        if (pathinfo($file, PATHINFO_EXTENSION) !== 'csv') continue;
+
+        $filename = basename($file, '.csv');
+        if (!preg_match('/(\d{8})/', $filename, $matches)) continue;
+
+        $fileDate = $matches[1];
+        if (!$this->shouldIncludeFile($fileDate, $dateFilter)) continue;
+
+        $stream = Storage::readStream($file);
+        if (!$stream) continue;
+
+        $headerSkipped = false;
+        while (($line = fgets($stream)) !== false) {
+            if (!$headerSkipped) {
+                $headerSkipped = true;
                 continue;
+            }
 
-            $filename = basename($file, '.csv');
-            if (!preg_match('/(\d{8})/', $filename, $matches))
-                continue;
+            if (trim($line) === '') continue;
 
-            $fileDate = $matches[1];
-            if (!$this->shouldIncludeFile($fileDate, $dateFilter))
-                continue;
+            $columns = str_getcsv($line);
+            if (count($columns) >= 5) {
+                $row = [
+                    'transaction_date' => $columns[0] ?? '',
+                    'transaction_time' => $columns[1] ?? '',
+                    'amount' => $columns[2] ?? '',
+                    'mobile_number' => $columns[3] ?? '',
+                    'transaction_id' => $columns[4] ?? ''
+                ];
 
-            $stream = Storage::readStream($file);
-            if (!$stream)
-                continue;
-
-            $headerSkipped = false;
-            while (($line = fgets($stream)) !== false) {
-                if (!$headerSkipped) {
-                    $headerSkipped = true;
-                    continue;
-                }
-
-                if (trim($line) === '')
-                    continue;
-
-                $columns = str_getcsv($line);
-                if (count($columns) >= 5) {
-                    $row = [
-                        'transaction_date' => $columns[0] ?? '',
-                        'transaction_time' => $columns[1] ?? '',
-                        'amount' => $columns[2] ?? '',
-                        'mobile_number' => $columns[3] ?? '',
-                        'transaction_id' => $columns[4] ?? ''
-                    ];
-
-                    // Apply search filter
-                    if ($search === '' || $this->matchesSearch($row, $search)) {
-                        $allRows->push($row);
-                    }
+                // Apply search filter
+                if ($search === '' || $this->matchesSearch($row, $search)) {
+                    $allRows->push($row);
                 }
             }
-            fclose($stream);
+        }
+        fclose($stream);
+    }
+
+    // Sort the collection
+    $sortedRows = $this->sortCollection($allRows, $orderBy, $orderDir);
+
+    // Return the requested page
+    return $sortedRows->slice($start, $length)->values();
+}
+
+private function matchesSearch(array $row, string $search): bool
+{
+    $search = strtolower($search);
+
+    // Search across all columns
+    foreach ($row as $value) {
+        if (strpos(strtolower((string)$value), $search) !== false) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+private function sortCollection(Collection $collection, string $orderBy, string $orderDir): Collection
+{
+    return $collection->sortBy(function ($item) use ($orderBy) {
+        $value = $item[$orderBy] ?? '';
+
+        // Handle numeric sorting for amount
+        if ($orderBy === 'amount') {
+            return (float) $value;
         }
 
-        // Sort the collection
-        $sortedRows = $this->sortCollection($allRows, $orderBy, $orderDir);
+        // Handle date/time sorting
+        if ($orderBy === 'transaction_date' || $orderBy === 'transaction_time') {
+            return $value; // These should already be in sortable format
+        }
 
-        // Return the requested page
-        return $sortedRows->slice($start, $length)->values();
-    }
+        // Default string sorting
+        return strtolower((string) $value);
+    }, SORT_REGULAR, $orderDir === 'desc');
+}
+
 
 
     // private function getTransactionPage(string $dateFilter, int $start, int $length): Collection
@@ -292,40 +323,6 @@ class MessageController extends Controller
 
         return $count;
     });
-}
-
-private function matchesSearch(array $row, string $search): bool
-{
-    $search = strtolower($search);
-
-    // Search across all columns
-    foreach ($row as $value) {
-        if (strpos(strtolower((string)$value), $search) !== false) {
-            return true;
-        }
-    }
-
-    return false;
-}
-
-private function sortCollection(Collection $collection, string $orderBy, string $orderDir): Collection
-{
-    return $collection->sortBy(function ($item) use ($orderBy) {
-        $value = $item[$orderBy] ?? '';
-
-        // Handle numeric sorting for amount
-        if ($orderBy === 'amount') {
-            return (float) $value;
-        }
-
-        // Handle date/time sorting
-        if ($orderBy === 'transaction_date' || $orderBy === 'transaction_time') {
-            return $value; // These should already be in sortable format
-        }
-
-        // Default string sorting
-        return strtolower((string) $value);
-    }, SORT_REGULAR, $orderDir === 'desc');
 }
 
     // private function getCachedTransactionCount(string $dateFilter): int
