@@ -223,7 +223,7 @@ public function getData(Request $request)
     // }
 
 
-private function getTransactionPage(string $dateFilter, int $start, int $length, string $search = '', string $orderBy = 'transaction_date', string $orderDir = 'asc'): Collection
+private function getTransactionPage(string $dateFilter, int $start, int $length,?string $search = '', string $orderBy = 'transaction_date', string $orderDir = 'asc'): Collection
 {
     $allRows = collect();
     $exportDirectory = 'exports';
