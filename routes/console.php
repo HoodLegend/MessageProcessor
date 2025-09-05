@@ -28,7 +28,7 @@ Schedule::command('files:move-dat --copy --batch-size=100')
     ->everyTwoMinutes()
     ->withoutOverlapping()
     ->runInBackground()
-    ->appendOutputTo(storage_path("logs/data_from_DATfile_logs"))
+    // ->appendOutputTo(storage_path("logs/data_from_DATfile_logs"))
     ->onSuccess(function () {
         \Log::info('Scheduled message copying completed successfully');
         \Log::info('files:move-dat START at ' . now());

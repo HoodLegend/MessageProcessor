@@ -324,7 +324,7 @@ class ParseDatFilesCommand extends Command
     }
 
     /**
-     * Display results in the specified format
+     * Display results of the parsing of the DAT Files in the specified format
      */
     private function displayResults(Collection $results, string $format): void
     {
@@ -516,6 +516,11 @@ class ParseDatFilesCommand extends Command
         $this->info(str_repeat('=', 50));
     }
 
+    /**
+     * Send the recent transactions i.e those received after the 8 AM onwards to the URL specified..
+     * @param \Illuminate\Support\Collection $filteredResults
+     * @return void
+     */
     private function sendIndividualTransactions(Collection $filteredResults): void
     {
 
@@ -638,13 +643,13 @@ class ParseDatFilesCommand extends Command
         $actualProcessed = $filteredResults->count() - $duplicateSkips;
 
         // Transmission Summary
-        $this->info("=== TRANSMISSION COMPLETE ===");
-        $this->info("Processing time: {$processingTime} seconds");
-        $this->info("Total transactions: {$filteredResults->count()}");
-        $this->info("Duplicate transactions skipped: {$duplicateSkips}");
-        $this->info("Transactions processed: {$actualProcessed}");
-        $this->info("Successful sends: {$successfulSends}");
-        $this->info("Failed sends: {$failedSends}");
+        // $this->info("=== TRANSMISSION COMPLETE ===");
+        // $this->info("Processing time: {$processingTime} seconds");
+        // $this->info("Total transactions: {$filteredResults->count()}");
+        // $this->info("Duplicate transactions skipped: {$duplicateSkips}");
+        // $this->info("Transactions processed: {$actualProcessed}");
+        // $this->info("Successful sends: {$successfulSends}");
+        // $this->info("Failed sends: {$failedSends}");
 
         if ($actualProcessed > 0) {
             $this->info("Success rate: " . round(($successfulSends / $actualProcessed) * 100, 1) . "%");
@@ -696,38 +701,36 @@ class ParseDatFilesCommand extends Command
             ? round($summaryData['processing_time_seconds'] / $summaryData['total_filtered_transactions'], 3)
             : 0;
 
-        $logEntry = "============================================================\n";
-        $logEntry .= "INDIVIDUAL TRANSACTION TRANSMISSION SUMMARY\n";
-        $logEntry .= "============================================================\n";
-        $logEntry .= "Timestamp                   : {$transmissionTime->format('Y-m-d H:i:s')}\n";
-        $logEntry .= "Total Filtered Transactions : {$summaryData['total_filtered_transactions']}\n";
-        $logEntry .= "Successful Transmissions    : {$summaryData['successful_sends']}\n";
-        $logEntry .= "Failed Transmissions        : {$summaryData['failed_sends']}\n";
-        $logEntry .= "Success Rate                : " . number_format($summaryData['success_rate_percent'], 2) . "%\n";
-        $logEntry .= "Processing Time             : {$summaryData['processing_time_seconds']} seconds\n";
-        $logEntry .= "Average Time Per Transaction: {$avgTime} seconds\n";
+        // Build the JSON entry
+        $logEntry = [
+            'timestamp' => $transmissionTime->format('Y-m-d H:i:s'),
+            'total_transactions' => $summaryData['total_filtered_transactions'],
+            'successful' => $summaryData['successful_sends'],
+            'failed' => $summaryData['failed_sends'],
+            'success_rate_percent' => round($summaryData['success_rate_percent'], 2),
+            'processing_time_seconds' => round($summaryData['processing_time_seconds'], 3),
+            'average_time_per_transaction' => $avgTime,
+        ];
 
+        // Optionally include up to 10 error messages
         if (!empty($summaryData['errors'])) {
-            $logEntry .= "\nERRORS ENCOUNTERED:\n";
-            foreach (array_slice($summaryData['errors'], 0, 10) as $error) {
-                $logEntry .= "  - {$error}\n";
-            }
-            if (count($summaryData['errors']) > 10) {
-                $logEntry .= "  ... and " . (count($summaryData['errors']) - 10) . " more errors\n";
+            $logEntry['errors'] = array_slice($summaryData['errors'], 0, 10);
+            $extraErrors = count($summaryData['errors']) - 10;
+            if ($extraErrors > 0) {
+                $logEntry['error_summary'] = "... and {$extraErrors} more errors";
             }
         }
 
-        $logEntry .= "============================================================\n\n";
-
         try {
-            $logFile = 'logs/transactions_summary_' . $transmissionTime->format('Y-m-d') . '.log';
-            Storage::append($logFile, $logEntry);
+            $logFile = 'logs/transactions_summary_' . $transmissionTime->format('Y-m-d') . '.jsonl';
+            Storage::append($logFile, json_encode($logEntry));
         } catch (\Exception $e) {
-            \Log::error("Failed to write transmission summary: " . $e->getMessage());
+            \Log::error("Failed to write JSON transmission summary: " . $e->getMessage());
         }
 
         \Log::info('Individual transaction transmission completed', $summaryData);
     }
+
 
 
     /**
@@ -771,7 +774,7 @@ class ParseDatFilesCommand extends Command
             $logData['error_message'] = $error;
         }
 
-        \Log::info("Individual transaction transmission: {$status}", $logData);
+        \Log::info("Individual transaction transmission info: {$status}", $logData);
     }
 
 

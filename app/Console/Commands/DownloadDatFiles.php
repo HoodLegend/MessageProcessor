@@ -120,7 +120,7 @@ class DownloadDatFiles extends Command
 
             } catch (\Exception $e) {
                 $failCount++;
-                $this->error("✗ Error processing {$fileName}: " . $e->getMessage());
+                $this->error("Error processing {$fileName}: " . $e->getMessage());
                 $processedCount++;
             }
         }
